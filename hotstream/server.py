@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
 from urllib.parse import parse_qs, urlparse
 
 from hotstream.copywriter import DEFAULT_GLOBAL_PROMPT, build_default_temporary_prompt, generate_copy_with_deepseek
@@ -145,6 +147,45 @@ def build_prompts_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]
     return 200, headers, body
 
 
+def build_proxy_image_response(image_url: str, timeout: int = 12) -> tuple[int, dict[str, str], bytes]:
+    """Fetch a remote image and return it from the same origin for canvas export."""
+    json_headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+    }
+    parsed = urlparse(str(image_url or "").strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return 400, json_headers, _json_bytes({"success": False, "error": "图片地址必须是 http 或 https URL"})
+
+    try:
+        request = urllib.request.Request(
+            parsed.geturl(),
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                ),
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                "Referer": f"{parsed.scheme}://{parsed.netloc}/",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            content_type = str(response.headers.get("Content-Type") or "application/octet-stream").split(";")[0].strip()
+            body = response.read()
+    except URLError as exc:
+        return 502, json_headers, _json_bytes({"success": False, "error": str(exc.reason or exc)})
+    except Exception as exc:
+        return 502, json_headers, _json_bytes({"success": False, "error": str(exc)})
+
+    if not content_type.startswith("image/"):
+        return 415, json_headers, _json_bytes({"success": False, "error": "远程资源不是 image 图片内容"})
+
+    return 200, {
+        "Content-Type": content_type,
+        "Cache-Control": "public, max-age=86400",
+    }, body
+
+
 class HotStreamRequestHandler(SimpleHTTPRequestHandler):
     """Serve the prototype UI and a small JSON API."""
 
@@ -165,6 +206,17 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/toutiao-hot":
                 source = "toutiao"
             status, headers, body = build_hot_topics_response(limit=limit, source=source)
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/api/proxy-image":
+            params = parse_qs(parsed.query)
+            image_url = params.get("url", [""])[0]
+            status, headers, body = build_proxy_image_response(image_url)
             self.send_response(status)
             for key, value in headers.items():
                 self.send_header(key, value)

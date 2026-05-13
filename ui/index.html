@@ -437,6 +437,20 @@
       white-space: pre-wrap;
     }
 
+    .edit-flow {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .edit-flow .ghost-btn.primary-edit {
+      border-color: transparent;
+      color: #fff;
+      background: linear-gradient(135deg, #0f766e, var(--accent));
+      box-shadow: 0 14px 30px rgba(20, 184, 166, .18);
+    }
+
     .small-actions {
       display: flex;
       gap: 10px;
@@ -554,6 +568,10 @@
             </div>
           </details>
           <button class="main-btn accent" id="generateBtn">生成文案</button>
+          <div class="edit-flow" aria-label="编辑入口">
+            <button class="ghost-btn primary-edit" id="editContentBtn">生成后编辑内容</button>
+            <button class="ghost-btn" id="continueDraftBtn">继续编辑草稿</button>
+          </div>
           <div class="copy-output" id="copyOutput">文案结果会显示在这里。</div>
           <div class="image-section" id="imageSection">
             <div class="image-section-title">相关图片 <span>最多 30 张</span></div>
@@ -575,6 +593,7 @@
     let topics = [];
     let selectedTopic = null;
     let lastCopyFilename = 'hotstream-copy.txt';
+    let lastGeneratedImages = [];
     const topicList = document.getElementById('topicList');
     const output = document.getElementById('copyOutput');
     const imageSection = document.getElementById('imageSection');
@@ -588,6 +607,8 @@
     const toggleApiKeyBtn = document.getElementById('toggleApiKeyBtn');
     const globalPromptInput = document.getElementById('globalPrompt');
     const temporaryPromptInput = document.getElementById('temporaryPrompt');
+    const EDIT_IMPORT_KEY = 'hotstream.editorDraft';
+    const EDIT_LIVE_KEY = 'hotstream.editorLiveDraft';
 
     function currentSourceLabel() {
       return sourceSelect.options[sourceSelect.selectedIndex].textContent;
@@ -790,7 +811,8 @@
         const payload = await response.json();
         if (!payload.success) throw new Error(payload.error || '生成失败');
         output.textContent = payload.copy;
-        renderImages(payload.images || []);
+        lastGeneratedImages = payload.images || [];
+        renderImages(lastGeneratedImages);
         lastCopyFilename = payload.filename || 'hotstream-copy.txt';
         showToast('文案和图片已生成');
       } catch (error) {
@@ -801,6 +823,29 @@
         generateBtn.disabled = false;
         generateBtn.textContent = '生成文案';
       }
+    });
+
+    document.getElementById('editContentBtn').addEventListener('click', () => {
+      const text = getGeneratedText();
+      if (!text) return showToast('请先生成文案再进入编辑页');
+      const draft = {
+        title: selectedTopic?.title || 'HotStream 文案',
+        topic: selectedTopic,
+        content: text,
+        images: lastGeneratedImages,
+        filename: lastCopyFilename,
+        updated_at: new Date().toISOString()
+      };
+      localStorage.setItem(EDIT_IMPORT_KEY, JSON.stringify(draft));
+      window.location.href = '/editor.html';
+    });
+
+    document.getElementById('continueDraftBtn').addEventListener('click', () => {
+      if (!localStorage.getItem(EDIT_LIVE_KEY)) {
+        showToast('暂无本地草稿；生成文案后可进入编辑页保存');
+        return;
+      }
+      window.location.href = '/editor.html';
     });
 
     document.getElementById('copyBtn').addEventListener('click', async () => {
@@ -824,6 +869,7 @@
     document.getElementById('clearBtn').addEventListener('click', () => {
       selectedTopic = null;
       lastCopyFilename = 'hotstream-copy.txt';
+      lastGeneratedImages = [];
       briefInput.value = '';
       temporaryPromptInput.value = '';
       loadPromptsForCurrentTopic({ silent: true });

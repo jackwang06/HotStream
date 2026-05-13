@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HotStream 文案编辑器</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --primary: #111827;
+      --accent: #14b8a6;
+      --accent-soft: #e6fffb;
+      --danger: #ef4444;
+      --radius: 22px;
+      --shadow: 0 24px 70px rgba(17, 24, 39, .08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(20, 184, 166, .16), transparent 30%),
+        linear-gradient(180deg, #ffffff 0%, var(--bg) 100%);
+    }
+
+    button, textarea, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .page {
+      width: min(1560px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 30px 0 42px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 900;
+      letter-spacing: -.04em;
+    }
+
+    .logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--primary);
+      box-shadow: 0 12px 26px rgba(17, 24, 39, .16);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 11px 13px;
+      color: #374151;
+      background: #fff;
+      font-weight: 800;
+      transition: .18s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(17,24,39,.08); }
+    .btn.primary { border-color: var(--primary); color: #fff; background: var(--primary); }
+    .btn.accent { border-color: transparent; color: #fff; background: linear-gradient(135deg, #0f766e, var(--accent)); }
+    .btn.danger { color: var(--danger); }
+    .btn.small { padding: 7px 9px; border-radius: 10px; font-size: 12px; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(430px, .94fr) minmax(420px, 1fr) minmax(300px, .62fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .panel {
+      min-height: calc(100vh - 126px);
+      border: 1px solid rgba(229, 231, 235, .9);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, .9);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 16px 18px;
+      border-bottom: 1px solid #eef0f3;
+    }
+
+    .panel-title { display: flex; align-items: center; gap: 10px; font-weight: 900; }
+    .step {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--primary);
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .hint { color: var(--muted); font-size: 12px; }
+    .panel-body { padding: 16px 18px 18px; }
+
+    .field { display: grid; gap: 8px; margin-bottom: 12px; }
+    .field label { color: #374151; font-size: 13px; font-weight: 850; }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      outline: none;
+      background: #fff;
+      color: var(--text);
+      transition: .18s ease;
+    }
+    input, select { padding: 12px 13px; }
+    textarea {
+      resize: vertical;
+      padding: 13px;
+      line-height: 1.76;
+      font-size: 15px;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: rgba(20, 184, 166, .75);
+      box-shadow: 0 0 0 4px rgba(20, 184, 166, .12);
+    }
+
+    .editor-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+    .meta-line { color: var(--muted); font-size: 12px; line-height: 1.65; }
+
+    .block-editor {
+      display: grid;
+      gap: 12px;
+      min-height: calc(100vh - 382px);
+      padding: 12px;
+      border: 1px dashed #d8dee8;
+      border-radius: 18px;
+      background: #fbfbfc;
+    }
+
+    .content-block {
+      overflow: hidden;
+      border: 1px solid #e7eaef;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 10px 24px rgba(17,24,39,.04);
+    }
+
+    .content-block.dragging { opacity: .52; }
+    .content-block.drag-over { outline: 3px solid rgba(20, 184, 166, .28); }
+
+    .block-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid #f0f2f5;
+      background: #fcfdfd;
+    }
+
+    .block-label {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 8px;
+      color: #374151;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .drag-handle {
+      display: inline-grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 9px;
+      color: #64748b;
+      background: #f1f5f9;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .block-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .block-textarea {
+      min-height: 118px;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none !important;
+      background: #fff;
+    }
+
+    .image-block-body { padding: 12px; }
+    .image-block-body img {
+      display: block;
+      width: 100%;
+      max-height: 360px;
+      object-fit: contain;
+      border-radius: 14px;
+      background: #f3f4f6;
+    }
+    .image-caption { margin-top: 8px; color: var(--muted); font-size: 12px; }
+
+    .preview-wrap {
+      height: calc(100vh - 184px);
+      overflow: auto;
+      padding: 18px;
+      background: #f3f4f6;
+    }
+    .preview-doc {
+      width: min(100%, 580px);
+      margin: 0 auto;
+      padding: 34px 34px 42px;
+      border-radius: 26px;
+      background: #fff;
+      box-shadow: 0 24px 60px rgba(17,24,39,.12);
+    }
+    .preview-doc h1 { margin: 0 0 18px; line-height: 1.25; letter-spacing: -.05em; font-size: 30px; }
+    .preview-doc .source { margin-bottom: 22px; color: var(--muted); font-size: 13px; }
+    .preview-doc p { margin: 0 0 15px; line-height: 1.86; font-size: 16px; }
+    .preview-doc img { display: block; width: 100%; max-height: 540px; object-fit: contain; margin: 18px 0; border-radius: 18px; background: #f3f4f6; }
+    .preview-empty { color: var(--muted); text-align: center; padding: 60px 0; }
+
+    .material-actions { display: grid; gap: 10px; }
+    .upload-label {
+      display: block;
+      border: 1px dashed #cbd5e1;
+      border-radius: 18px;
+      padding: 14px;
+      color: #0f766e;
+      background: var(--accent-soft);
+      text-align: center;
+      font-weight: 850;
+      cursor: pointer;
+    }
+    .upload-label input { display: none; }
+    .material-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
+    .material-card {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid #edf0f3;
+      border-radius: 16px;
+      background: #fff;
+    }
+    .material-card[draggable="true"] { cursor: grab; }
+    .material-card img { display: block; width: 100%; aspect-ratio: 1.25; object-fit: cover; background: #f3f4f6; }
+    .material-info { padding: 8px; }
+    .material-title { overflow: hidden; margin-bottom: 8px; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .material-card button { width: 100%; border-radius: 12px; padding: 8px 9px; font-size: 12px; }
+    .empty { padding: 22px; border: 1px dashed #d1d5db; border-radius: 18px; color: var(--muted); text-align: center; background: #fafafa; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      transform: translate(-50%, 16px);
+      opacity: 0;
+      pointer-events: none;
+      padding: 13px 16px;
+      border-radius: 999px;
+      color: #fff;
+      background: #111827;
+      box-shadow: 0 18px 42px rgba(17, 24, 39, .22);
+      transition: .22s ease;
+      font-size: 14px;
+      z-index: 20;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 1180px) {
+      .workspace { grid-template-columns: 1fr; }
+      .panel { min-height: auto; }
+      .block-editor { min-height: 360px; }
+      .preview-wrap { height: 620px; }
+      .material-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 620px) {
+      .page { width: min(100% - 24px, 1560px); padding-top: 20px; }
+      header { align-items: flex-start; flex-direction: column; }
+      .toolbar { justify-content: flex-start; }
+      .editor-tools, .material-grid { grid-template-columns: 1fr; }
+      .preview-doc { padding: 24px 22px 32px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div class="brand"><div class="logo">H</div><span>HotStream 文案编辑器</span></div>
+      <div class="toolbar">
+        <button class="btn" id="backBtn">返回生成页</button>
+        <button class="btn" id="loadDraftBtn">载入本地草稿</button>
+        <button class="btn" id="saveDraftBtn">保存草稿</button>
+        <button class="btn accent" id="exportImageBtn">导出长图</button>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="step">1</span>编辑文案</div>
+          <span class="hint" id="wordCount">0 字</span>
+        </div>
+        <div class="panel-body">
+          <div class="field">
+            <label for="editorTitle">标题</label>
+            <input id="editorTitle" placeholder="给这篇文案起一个标题" />
+          </div>
+          <div class="editor-tools">
+            <button class="btn" id="addTextBlockBtn">添加文字段落</button>
+            <button class="btn danger" id="clearDraftBtn">清空编辑页</button>
+          </div>
+          <textarea id="editorText" hidden aria-hidden="true"></textarea>
+          <div class="field">
+            <label for="blockEditor">正文块</label>
+            <div class="block-editor" id="blockEditor" aria-label="可拖拽排序的正文块"></div>
+          </div>
+          <div class="meta-line" id="draftMeta">草稿会保存在本机浏览器 localStorage；下次从主页点“继续编辑草稿”或直接打开编辑页会自动载入。</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="step">2</span>发布预览</div>
+          <select id="platformPreset" aria-label="平台预设">
+            <option value="xhs">小红书长图 · 1080 宽</option>
+            <option value="wechat">公众号头图感 · 900 宽</option>
+            <option value="simple">简洁通用 · 800 宽</option>
+          </select>
+        </div>
+        <div class="preview-wrap">
+          <article class="preview-doc" id="previewDoc"></article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="step">3</span>素材区</div>
+          <span class="hint">生成图 + 手动导入</span>
+        </div>
+        <div class="panel-body">
+          <div class="material-actions">
+            <label class="upload-label">
+              导入本地图片到素材区
+              <input id="assetUpload" type="file" accept="image/*" multiple />
+            </label>
+            <div class="meta-line">点击“插入正文”或把素材拖到左侧正文块区域，图片会以可视化卡片进入正文并参与长图导出。</div>
+          </div>
+          <div class="material-grid" id="materialGrid"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div class="toast" id="toast">已完成</div>
+
+  <script>
+    const IMPORT_KEY = 'hotstream.editorDraft';
+    const LIVE_KEY = 'hotstream.editorLiveDraft';
+    const titleInput = document.getElementById('editorTitle');
+    const textInput = document.getElementById('editorText');
+    const blockEditor = document.getElementById('blockEditor');
+    const materialGrid = document.getElementById('materialGrid');
+    const previewDoc = document.getElementById('previewDoc');
+    const wordCount = document.getElementById('wordCount');
+    const toast = document.getElementById('toast');
+    const draftMeta = document.getElementById('draftMeta');
+    let blocks = [];
+    let materials = [];
+    let sourceTopic = null;
+
+    const presets = {
+      xhs: { width: 1080, padding: 72, title: 52, body: 34, line: 1.78, accent: '#14b8a6' },
+      wechat: { width: 900, padding: 64, title: 44, body: 29, line: 1.82, accent: '#0f766e' },
+      simple: { width: 800, padding: 56, title: 38, body: 27, line: 1.76, accent: '#111827' }
+    };
+
+    function showToast(text) {
+      toast.textContent = text;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 1900);
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[char]));
+    }
+
+    function makeId(prefix) {
+      return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function proxyImageUrl(url) {
+      if (!url || url.startsWith('data:') || url.startsWith('/api/proxy-image')) return url;
+      return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+    }
+
+    function normalizeImage(image, index = 0) {
+      const raw = image?.originalUrl || image?.url || image?.thumbnail || image?.displayUrl || '';
+      const title = image?.title || `素材 ${index + 1}`;
+      return {
+        id: image?.id || makeId(`asset-${index}`),
+        title,
+        originalUrl: raw,
+        displayUrl: image?.displayUrl || proxyImageUrl(raw),
+        source: image?.source || '生成图片'
+      };
+    }
+
+    function ensureMaterialForImage(url, title = '正文图片') {
+      const normalizedUrl = proxyImageUrl(url);
+      let asset = materials.find(item => item.displayUrl === normalizedUrl || item.originalUrl === url);
+      if (!asset) {
+        asset = normalizeImage({ url, title, source: '正文图片' }, materials.length);
+        materials.unshift(asset);
+      }
+      return asset;
+    }
+
+    function normalizeBlock(block, index = 0) {
+      if (block?.type === 'image') {
+        const url = block.url || block.displayUrl || block.originalUrl || '';
+        const asset = block.assetId ? materials.find(item => item.id === block.assetId) : ensureMaterialForImage(url, block.title || block.alt || `图片 ${index + 1}`);
+        return {
+          id: block.id || makeId('image'),
+          type: 'image',
+          title: block.title || block.alt || asset?.title || `图片 ${index + 1}`,
+          url: asset?.displayUrl || proxyImageUrl(url),
+          assetId: asset?.id || null
+        };
+      }
+      return {
+        id: block?.id || makeId('text'),
+        type: 'text',
+        text: block?.text || ''
+      };
+    }
+
+    function splitTextToBlocks(text) {
+      return String(text || '')
+        .split(/\n{2,}/)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(text => ({ id: makeId('text'), type: 'text', text }));
+    }
+
+    function parseLegacyContent(text) {
+      const parsed = [];
+      String(text || '').split(/\n{2,}/).forEach((part, index) => {
+        const trimmed = part.trim();
+        if (!trimmed) return;
+        const img = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+        if (img) {
+          const asset = ensureMaterialForImage(img[2], img[1] || `图片 ${index + 1}`);
+          parsed.push({ id: makeId('image'), type: 'image', title: asset.title, url: asset.displayUrl, assetId: asset.id });
+        } else {
+          parsed.push({ id: makeId('text'), type: 'text', text: trimmed });
+        }
+      });
+      return parsed;
+    }
+
+    function applyDraft(draft, metaText, { autoSave = true } = {}) {
+      const safeDraft = draft || { title: '', content: '', images: [], blocks: [], topic: null };
+      titleInput.value = safeDraft.title || safeDraft.topic?.title || '';
+      sourceTopic = safeDraft.topic || null;
+      materials = (safeDraft.images || []).filter(Boolean).map(normalizeImage);
+      if (Array.isArray(safeDraft.blocks) && safeDraft.blocks.length) {
+        blocks = safeDraft.blocks.map(normalizeBlock);
+      } else if (safeDraft.content) {
+        blocks = parseLegacyContent(safeDraft.content);
+      } else {
+        blocks = [];
+      }
+      draftMeta.textContent = metaText || '草稿会保存在本机浏览器 localStorage；下次从主页点“继续编辑草稿”或直接打开编辑页会自动载入。';
+      renderAll({ autoSave });
+    }
+
+    function loadInitialDraft() {
+      const imported = localStorage.getItem(IMPORT_KEY);
+      const live = localStorage.getItem(LIVE_KEY);
+      let draft = null;
+      let meta = '';
+      if (imported) {
+        try { draft = JSON.parse(imported); } catch { draft = null; }
+        localStorage.removeItem(IMPORT_KEY);
+        meta = draft?.updated_at ? `已导入刚生成的内容 · ${new Date(draft.updated_at).toLocaleString('zh-CN')}` : '已导入刚生成的内容。';
+      }
+      if (!draft && live) {
+        try { draft = JSON.parse(live); } catch { draft = null; }
+        meta = draft?.updated_at ? `已自动载入本地草稿 · ${new Date(draft.updated_at).toLocaleString('zh-CN')}` : '已自动载入本地草稿。';
+      }
+      applyDraft(draft, meta, { autoSave: Boolean(draft) });
+    }
+
+    function loadSavedDraft() {
+      const live = localStorage.getItem(LIVE_KEY);
+      if (!live) return showToast('暂无可载入的本地草稿');
+      let draft = null;
+      try { draft = JSON.parse(live); } catch { draft = null; }
+      if (!draft) return showToast('本地草稿读取失败');
+      applyDraft(draft, `已载入本地草稿 · ${new Date(draft.updated_at || Date.now()).toLocaleString('zh-CN')}`);
+      showToast('已载入本地草稿');
+    }
+
+    function serializeBlocks() {
+      return blocks
+        .map(block => {
+          if (block.type === 'image') return `![${block.title || '图片素材'}](${block.url})`;
+          return (block.text || '').trim();
+        })
+        .filter(Boolean)
+        .join('\n\n');
+    }
+
+    function currentDraft() {
+      return {
+        title: titleInput.value.trim(),
+        content: serializeBlocks(),
+        blocks,
+        topic: sourceTopic,
+        images: materials,
+        updated_at: new Date().toISOString()
+      };
+    }
+
+    function saveDraft({ silent = false } = {}) {
+      localStorage.setItem(LIVE_KEY, JSON.stringify(currentDraft()));
+      if (!silent) showToast('草稿已保存；下次从主页点“继续编辑草稿”可载入');
+    }
+
+    function visibleBlocks() {
+      return blocks.filter(block => block.type === 'image' || (block.text || '').trim());
+    }
+
+    function syncHiddenText() {
+      textInput.value = serializeBlocks();
+    }
+
+    function renderPreview() {
+      const title = titleInput.value.trim();
+      const bodyBlocks = visibleBlocks();
+      if (!title && !bodyBlocks.length) {
+        previewDoc.innerHTML = '<div class="preview-empty">生成的文案会自动导入；也可以从左侧添加文字段落和图片块。</div>';
+        return;
+      }
+      previewDoc.innerHTML = `
+        ${title ? `<h1>${escapeHtml(title)}</h1>` : ''}
+        ${sourceTopic ? `<div class="source">来源：${escapeHtml(sourceTopic.source || '')}${sourceTopic.hot_value ? ` · 热度 ${Number(sourceTopic.hot_value).toLocaleString('zh-CN')}` : ''}</div>` : ''}
+        ${bodyBlocks.map(block => block.type === 'image'
+          ? `<img src="${escapeHtml(block.url)}" alt="${escapeHtml(block.title || '图片素材')}" referrerpolicy="no-referrer" />`
+          : String(block.text || '').split('\n').filter(Boolean).map(line => `<p>${escapeHtml(line)}</p>`).join('')
+        ).join('')}
+      `;
+    }
+
+    function renderBlockEditor() {
+      if (!blocks.length) {
+        blockEditor.innerHTML = '<div class="empty">暂无正文块。点击“添加文字段落”，或从素材区插入图片。</div>';
+        return;
+      }
+      blockEditor.innerHTML = blocks.map((block, index) => {
+        const controls = `
+          <div class="block-controls">
+            <button class="btn small" data-action="up" data-block-id="${escapeHtml(block.id)}">上移</button>
+            <button class="btn small" data-action="down" data-block-id="${escapeHtml(block.id)}">下移</button>
+            <button class="btn small" data-action="add-after" data-block-id="${escapeHtml(block.id)}">后加文字</button>
+            <button class="btn small danger" data-action="delete" data-block-id="${escapeHtml(block.id)}">删除</button>
+          </div>
+        `;
+        if (block.type === 'image') {
+          return `
+            <article class="content-block" draggable="true" data-block-id="${escapeHtml(block.id)}" data-block-type="image">
+              <div class="block-head">
+                <div class="block-label"><span class="drag-handle">⠿</span><span>图片块 ${index + 1}</span></div>
+                ${controls}
+              </div>
+              <div class="image-block-body">
+                <img src="${escapeHtml(block.url)}" alt="${escapeHtml(block.title || '图片素材')}" referrerpolicy="no-referrer" />
+                <div class="image-caption">${escapeHtml(block.title || '图片素材')} · 可拖拽调整位置</div>
+              </div>
+            </article>
+          `;
+        }
+        return `
+          <article class="content-block" draggable="true" data-block-id="${escapeHtml(block.id)}" data-block-type="text">
+            <div class="block-head">
+              <div class="block-label"><span class="drag-handle">⠿</span><span>文字段落 ${index + 1}</span></div>
+              ${controls}
+            </div>
+            <textarea class="block-textarea" data-text-block-id="${escapeHtml(block.id)}" placeholder="输入这一段正文">${escapeHtml(block.text || '')}</textarea>
+          </article>
+        `;
+      }).join('');
+      wireBlockEditorEvents();
+    }
+
+    function renderMaterials() {
+      if (!materials.length) {
+        materialGrid.innerHTML = '<div class="empty">暂无素材。生成图片会自动出现在这里，也可以导入本地图片。</div>';
+        return;
+      }
+      materialGrid.innerHTML = materials.map(asset => `
+        <div class="material-card" draggable="true" data-asset-id="${escapeHtml(asset.id)}">
+          <img src="${escapeHtml(asset.displayUrl)}" alt="${escapeHtml(asset.title)}" referrerpolicy="no-referrer" />
+          <div class="material-info">
+            <div class="material-title">${escapeHtml(asset.title)} · ${escapeHtml(asset.source)}</div>
+            <button class="btn" data-insert="${escapeHtml(asset.id)}">插入正文</button>
+          </div>
+        </div>
+      `).join('');
+      materialGrid.querySelectorAll('[data-insert]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const asset = materials.find(item => item.id === btn.dataset.insert);
+          if (asset) insertImageBlock(asset);
+        });
+      });
+      materialGrid.querySelectorAll('[data-asset-id]').forEach(card => {
+        card.addEventListener('dragstart', event => {
+          event.dataTransfer.setData('application/x-hotstream-asset', card.dataset.assetId);
+          event.dataTransfer.effectAllowed = 'copy';
+        });
+      });
+    }
+
+    function updateDerived({ autoSave = true } = {}) {
+      syncHiddenText();
+      const count = blocks
+        .filter(block => block.type === 'text')
+        .map(block => block.text || '')
+        .join('')
+        .replace(/\s+/g, '').length;
+      wordCount.textContent = `${count.toLocaleString('zh-CN')} 字`;
+      renderPreview();
+      if (autoSave) saveDraft({ silent: true });
+    }
+
+    function renderAll(options = {}) {
+      renderBlockEditor();
+      renderMaterials();
+      updateDerived(options);
+    }
+
+    function addTextBlock(afterId = null, text = '') {
+      const block = { id: makeId('text'), type: 'text', text };
+      if (!afterId) {
+        blocks.push(block);
+      } else {
+        const index = blocks.findIndex(item => item.id === afterId);
+        blocks.splice(index >= 0 ? index + 1 : blocks.length, 0, block);
+      }
+      renderAll();
+      setTimeout(() => {
+        const textarea = blockEditor.querySelector(`[data-text-block-id="${CSS.escape(block.id)}"]`);
+        if (textarea) textarea.focus();
+      }, 0);
+    }
+
+    function insertImageBlock(asset, { beforeId = null } = {}) {
+      const block = {
+        id: makeId('image'),
+        type: 'image',
+        title: asset.title,
+        url: asset.displayUrl,
+        assetId: asset.id
+      };
+      if (beforeId) {
+        const index = blocks.findIndex(item => item.id === beforeId);
+        blocks.splice(index >= 0 ? index : blocks.length, 0, block);
+      } else {
+        blocks.push(block);
+      }
+      renderAll();
+      showToast('素材已作为图片块插入正文');
+    }
+
+    function moveBlock(id, direction) {
+      const index = blocks.findIndex(block => block.id === id);
+      if (index < 0) return;
+      const nextIndex = direction === 'up' ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= blocks.length) return;
+      const [block] = blocks.splice(index, 1);
+      blocks.splice(nextIndex, 0, block);
+      renderAll();
+    }
+
+    function moveBlockBefore(draggedId, targetId) {
+      if (!draggedId || !targetId || draggedId === targetId) return;
+      const from = blocks.findIndex(block => block.id === draggedId);
+      const to = blocks.findIndex(block => block.id === targetId);
+      if (from < 0 || to < 0) return;
+      const [block] = blocks.splice(from, 1);
+      const nextTo = blocks.findIndex(item => item.id === targetId);
+      blocks.splice(nextTo, 0, block);
+      renderAll();
+    }
+
+    function deleteBlock(id) {
+      blocks = blocks.filter(block => block.id !== id);
+      renderAll();
+      showToast('已删除正文块');
+    }
+
+    function wireBlockEditorEvents() {
+      blockEditor.querySelectorAll('[data-text-block-id]').forEach(textarea => {
+        textarea.addEventListener('input', () => {
+          const block = blocks.find(item => item.id === textarea.dataset.textBlockId);
+          if (block) block.text = textarea.value;
+          updateDerived();
+        });
+      });
+      blockEditor.querySelectorAll('[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.blockId;
+          if (btn.dataset.action === 'up') moveBlock(id, 'up');
+          if (btn.dataset.action === 'down') moveBlock(id, 'down');
+          if (btn.dataset.action === 'add-after') addTextBlock(id);
+          if (btn.dataset.action === 'delete') deleteBlock(id);
+        });
+      });
+      blockEditor.querySelectorAll('.content-block').forEach(card => {
+        card.addEventListener('dragstart', event => {
+          event.dataTransfer.setData('application/x-hotstream-block', card.dataset.blockId);
+          event.dataTransfer.effectAllowed = 'move';
+          card.classList.add('dragging');
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        card.addEventListener('dragover', event => {
+          event.preventDefault();
+          card.classList.add('drag-over');
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+        card.addEventListener('drop', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          card.classList.remove('drag-over');
+          const assetId = event.dataTransfer.getData('application/x-hotstream-asset');
+          if (assetId) {
+            const asset = materials.find(item => item.id === assetId);
+            if (asset) insertImageBlock(asset, { beforeId: card.dataset.blockId });
+            return;
+          }
+          moveBlockBefore(event.dataTransfer.getData('application/x-hotstream-block'), card.dataset.blockId);
+        });
+      });
+    }
+
+    blockEditor.addEventListener('dragover', event => event.preventDefault());
+    blockEditor.addEventListener('drop', event => {
+      if (event.target.closest('.content-block')) return;
+      event.preventDefault();
+      const assetId = event.dataTransfer.getData('application/x-hotstream-asset');
+      if (assetId) {
+        const asset = materials.find(item => item.id === assetId);
+        if (asset) insertImageBlock(asset);
+        return;
+      }
+      const draggedId = event.dataTransfer.getData('application/x-hotstream-block');
+      const from = blocks.findIndex(block => block.id === draggedId);
+      if (from >= 0) {
+        const [block] = blocks.splice(from, 1);
+        blocks.push(block);
+        renderAll();
+      }
+    });
+
+    function addFiles(files) {
+      Array.from(files || []).forEach((file, index) => {
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          materials.unshift({
+            id: makeId(`upload-${index}`),
+            title: file.name.replace(/\.[^.]+$/, ''),
+            originalUrl: reader.result,
+            displayUrl: reader.result,
+            source: '本地导入'
+          });
+          renderAll();
+          showToast('图片已加入素材区');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function wrapText(ctx, text, maxWidth) {
+      const lines = [];
+      String(text).split('\n').forEach(paragraph => {
+        let line = '';
+        Array.from(paragraph).forEach(char => {
+          const test = line + char;
+          if (ctx.measureText(test).width > maxWidth && line) {
+            lines.push(line);
+            line = char;
+          } else {
+            line = test;
+          }
+        });
+        if (line) lines.push(line);
+      });
+      return lines;
+    }
+
+    function loadCanvasImage(src) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        if (src && !src.startsWith('data:')) img.crossOrigin = 'anonymous';
+        img.src = src;
+      });
+    }
+
+    async function measureLayout(ctx, preset, exportBlocks, title) {
+      const maxWidth = preset.width - preset.padding * 2;
+      let height = preset.padding;
+      ctx.font = `800 ${preset.title}px sans-serif`;
+      if (title) height += wrapText(ctx, title, maxWidth).length * preset.title * 1.25 + 26;
+      if (sourceTopic) height += 34;
+      ctx.font = `400 ${preset.body}px sans-serif`;
+      for (const block of exportBlocks) {
+        if (block.type === 'image') {
+          const img = await loadCanvasImage(block.url);
+          const imageHeight = img ? Math.min(img.naturalHeight * maxWidth / img.naturalWidth, 640) : 120;
+          block._img = img;
+          block._height = imageHeight;
+          height += imageHeight + 30;
+        } else {
+          const lines = wrapText(ctx, block.text, maxWidth);
+          block._lines = lines;
+          height += lines.length * preset.body * preset.line + 24;
+        }
+      }
+      return Math.ceil(height + preset.padding + 54);
+    }
+
+    function roundedRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    async function exportLongImage() {
+      const title = titleInput.value.trim() || 'HotStream 文案';
+      const exportBlocks = visibleBlocks().map(block => ({ ...block }));
+      if (!exportBlocks.length) return showToast('没有可导出的正文');
+      const preset = presets[document.getElementById('platformPreset').value] || presets.xhs;
+      const scale = Math.min(2, window.devicePixelRatio || 1.5);
+      const canvas = document.createElement('canvas');
+      const measureCanvas = document.createElement('canvas');
+      const measureCtx = measureCanvas.getContext('2d');
+      const height = await measureLayout(measureCtx, preset, exportBlocks, title);
+      canvas.width = preset.width * scale;
+      canvas.height = height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale);
+
+      ctx.fillStyle = '#f3f7f6';
+      ctx.fillRect(0, 0, preset.width, height);
+      ctx.fillStyle = '#ffffff';
+      roundedRect(ctx, 26, 26, preset.width - 52, height - 52, 34);
+      ctx.fill();
+
+      const x = preset.padding;
+      const maxWidth = preset.width - preset.padding * 2;
+      let y = preset.padding;
+
+      ctx.fillStyle = '#111827';
+      ctx.font = `800 ${preset.title}px sans-serif`;
+      wrapText(ctx, title, maxWidth).forEach(line => {
+        ctx.fillText(line, x, y + preset.title);
+        y += preset.title * 1.25;
+      });
+      y += 24;
+
+      if (sourceTopic) {
+        ctx.fillStyle = preset.accent;
+        ctx.font = `600 ${Math.round(preset.body * .72)}px sans-serif`;
+        const meta = `HotStream · ${sourceTopic.source || '热点'}${sourceTopic.hot_value ? ` · 热度 ${Number(sourceTopic.hot_value).toLocaleString('zh-CN')}` : ''}`;
+        ctx.fillText(meta, x, y);
+        y += 34;
+      }
+
+      for (const block of exportBlocks) {
+        if (block.type === 'image') {
+          if (block._img) {
+            const imgW = maxWidth;
+            const imgH = block._height;
+            roundedRect(ctx, x, y, imgW, imgH, 18);
+            ctx.save();
+            ctx.clip();
+            ctx.drawImage(block._img, x, y, imgW, imgH);
+            ctx.restore();
+            y += imgH + 30;
+          } else {
+            ctx.fillStyle = '#f3f4f6';
+            roundedRect(ctx, x, y, maxWidth, 110, 18);
+            ctx.fill();
+            ctx.fillStyle = '#6b7280';
+            ctx.font = `500 ${preset.body * .8}px sans-serif`;
+            ctx.fillText('图片加载失败，已跳过原图', x + 26, y + 65);
+            y += 140;
+          }
+        } else {
+          ctx.fillStyle = '#27313f';
+          ctx.font = `400 ${preset.body}px sans-serif`;
+          (block._lines || wrapText(ctx, block.text, maxWidth)).forEach(line => {
+            ctx.fillText(line, x, y + preset.body);
+            y += preset.body * preset.line;
+          });
+          y += 24;
+        }
+      }
+
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = `500 ${Math.round(preset.body * .64)}px sans-serif`;
+      ctx.fillText('由 HotStream 生成与编辑', x, height - preset.padding + 8);
+
+      const link = document.createElement('a');
+      const safeTitle = title.replace(/[^0-9A-Za-z\u4e00-\u9fff_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'hotstream-long-image';
+      link.download = `${safeTitle}.png`;
+      link.href = canvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      showToast('长图已导出');
+    }
+
+    titleInput.addEventListener('input', () => updateDerived());
+    document.getElementById('platformPreset').addEventListener('change', renderPreview);
+    document.getElementById('assetUpload').addEventListener('change', (event) => addFiles(event.target.files));
+    document.getElementById('addTextBlockBtn').addEventListener('click', () => addTextBlock());
+    document.getElementById('loadDraftBtn').addEventListener('click', loadSavedDraft);
+    document.getElementById('saveDraftBtn').addEventListener('click', () => saveDraft());
+    document.getElementById('exportImageBtn').addEventListener('click', exportLongImage);
+    document.getElementById('backBtn').addEventListener('click', () => { window.location.href = '/'; });
+    document.getElementById('clearDraftBtn').addEventListener('click', () => {
+      if (!confirm('确定清空当前编辑页草稿吗？')) return;
+      titleInput.value = '';
+      blocks = [];
+      materials = [];
+      sourceTopic = null;
+      localStorage.removeItem(LIVE_KEY);
+      localStorage.removeItem(IMPORT_KEY);
+      renderAll({ autoSave: false });
+      showToast('已清空编辑页');
+    });
+
+    loadInitialDraft();
+  </script>
+</body>
+</html>
