@@ -31,6 +31,20 @@ def test_home_page_has_prominent_edit_and_draft_entries():
     assert "editor.html" in content
 
 
+def test_home_topic_rows_have_original_link_icon_opening_new_tab():
+    content = read_ui_file("index.html")
+
+    assert "class=\"topic-link\"" in content
+    assert "target=\"_blank\"" in content
+    assert "rel=\"noopener noreferrer\"" in content
+    assert "aria-label=\"打开原文链接" in content
+    assert "↗" in content
+    assert "event.stopPropagation()" in content
+    assert "<button class=\"topic\"" not in content
+    assert "role=\"button\"" in content
+    assert "tabindex=\"0\"" in content
+
+
 def test_editor_uses_visual_blocks_instead_of_markdown_image_codes():
     content = read_ui_file("editor.html")
 
