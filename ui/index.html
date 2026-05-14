@@ -227,19 +227,25 @@
 
     .topic {
       display: grid;
-      grid-template-columns: 34px 1fr auto;
+      grid-template-columns: 34px 1fr auto 38px;
       gap: 12px;
       align-items: center;
       padding: 13px;
       border: 1px solid #edf0f3;
       border-radius: 18px;
       background: #fff;
+      cursor: pointer;
       transition: .18s ease;
     }
 
-    .topic:hover, .topic.selected {
+    .topic:hover, .topic.selected, .topic:focus-visible {
       border-color: rgba(20, 184, 166, .55);
       background: #fbfffe;
+    }
+
+    .topic:focus-visible {
+      outline: 3px solid rgba(20, 184, 166, .18);
+      outline-offset: 2px;
     }
 
     .rank {
@@ -253,13 +259,17 @@
       font-weight: 900;
     }
 
+    .topic-text {
+      min-width: 0;
+    }
+
     .topic strong {
       display: block;
       font-size: 15px;
       letter-spacing: -.02em;
     }
 
-    .topic span {
+    .topic-source {
       display: block;
       margin-top: 4px;
       color: var(--muted);
@@ -270,6 +280,36 @@
       color: #ef4444;
       font-weight: 850;
       white-space: nowrap;
+    }
+
+    .topic-link {
+      width: 38px;
+      height: 38px;
+      border: 1px solid rgba(20, 184, 166, .24);
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: #0f766e;
+      background: var(--accent-soft);
+      font-size: 18px;
+      font-weight: 900;
+      text-decoration: none;
+      transition: .18s ease;
+    }
+
+    .topic-link:hover, .topic-link:focus-visible {
+      color: #fff;
+      background: var(--accent);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    .topic-link.disabled {
+      color: #9ca3af;
+      background: #f3f4f6;
+      border-color: #e5e7eb;
+      cursor: not-allowed;
     }
 
     .empty {
@@ -498,8 +538,9 @@
       .page { width: min(100% - 24px, 1120px); padding: 24px 0; }
       header { align-items: flex-start; flex-direction: column; }
       .controls { grid-template-columns: 1fr; }
-      .topic { grid-template-columns: 34px 1fr; }
+      .topic { grid-template-columns: 34px 1fr auto; }
       .hot { grid-column: 2; }
+      .topic-link { grid-column: 3; grid-row: 1 / span 2; }
       .image-grid { grid-template-columns: repeat(2, 1fr); }
       .secret-row { grid-template-columns: 1fr; }
     }
@@ -712,21 +753,35 @@
       }
 
       topicList.innerHTML = visibleTopics.map(topic => `
-        <button class="topic" data-rank="${topic.rank}">
+        <div class="topic" role="button" tabindex="0" data-rank="${topic.rank}">
           <span class="rank">${topic.rank}</span>
-          <span><strong>${escapeHtml(topic.title)}</strong><span>${escapeHtml(topic.source || '今日头条')}</span></span>
+          <span class="topic-text"><strong>${escapeHtml(topic.title)}</strong><span class="topic-source">${escapeHtml(topic.source || '今日头条')}</span></span>
           <span class="hot">热度 ${Number(topic.hot_value || 0).toLocaleString('zh-CN')}</span>
-        </button>
+          ${topic.url ? `
+            <a class="topic-link" href="${escapeHtml(topic.url)}" target="_blank" rel="noopener noreferrer" aria-label="打开原文链接：${escapeHtml(topic.title)}" title="打开原文链接">↗</a>
+          ` : '<span class="topic-link disabled" aria-label="暂无原文链接" title="暂无原文链接">—</span>'}
+        </div>
       `).join('');
 
+      function selectTopicItem(item) {
+        document.querySelectorAll('.topic').forEach(el => el.classList.remove('selected'));
+        item.classList.add('selected');
+        selectedTopic = topics.find(topic => String(topic.rank) === item.dataset.rank);
+        briefInput.value = `请基于「${selectedTopic.title}」直接写一篇可发布的推文成稿，适合小红书/公众号开头，语气简洁、有信息量。不要输出写作建议或可选角度。`;
+        loadPromptsForCurrentTopic({ silent: true });
+        showToast('已选择热点');
+      }
+
+      document.querySelectorAll('.topic-link').forEach(link => {
+        link.addEventListener('click', event => event.stopPropagation());
+      });
+
       document.querySelectorAll('.topic').forEach(item => {
-        item.addEventListener('click', () => {
-          document.querySelectorAll('.topic').forEach(el => el.classList.remove('selected'));
-          item.classList.add('selected');
-          selectedTopic = topics.find(topic => String(topic.rank) === item.dataset.rank);
-          briefInput.value = `请基于「${selectedTopic.title}」直接写一篇可发布的推文成稿，适合小红书/公众号开头，语气简洁、有信息量。不要输出写作建议或可选角度。`;
-          loadPromptsForCurrentTopic({ silent: true });
-          showToast('已选择热点');
+        item.addEventListener('click', () => selectTopicItem(item));
+        item.addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          selectTopicItem(item);
         });
       });
     }
