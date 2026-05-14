@@ -7,6 +7,7 @@ from pathlib import Path
 def test_vercel_config_routes_to_python_handler() -> None:
     config = json.loads(Path("vercel.json").read_text(encoding="utf-8"))
     assert config["version"] == 2
+    assert config["installCommand"] == "python -V"
     rewrites = config["rewrites"]
     assert {"source": "/api/(.*)", "destination": "/api/index.py"} in rewrites
     assert {"source": "/(.*)", "destination": "/api/index.py"} in rewrites
