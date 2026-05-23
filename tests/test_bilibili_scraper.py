@@ -156,6 +156,19 @@ def test_fetch_bilibili_hot_topics_uses_search_keyword_category_and_order_click(
     assert topics[0]["title"] == "A"
 
 
+def test_fetch_bilibili_hot_topics_maps_travel_to_valid_chuxing_region():
+    payload = {"code": 0, "data": [{"title": "出行视频", "bvid": "BVTRAVEL", "play": 1, "typename": "出行"}]}
+
+    with patch("urllib.request.urlopen", return_value=FakeResponse(payload)) as urlopen:
+        topics = fetch_bilibili_hot_topics(limit=1, category="travel")
+
+    request = urlopen.call_args.args[0]
+    assert "x/web-interface/ranking/region" in request.full_url
+    assert "rid=250" in request.full_url
+    assert "rid=96" not in request.full_url
+    assert topics[0]["title"] == "出行视频"
+
+
 def test_fetch_bilibili_hot_topics_uses_region_for_category_without_keyword():
     payload = {"code": 0, "data": [{"title": "A", "bvid": "BVA", "play": 1}]}
 

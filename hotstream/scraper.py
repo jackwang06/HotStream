@@ -24,7 +24,7 @@ BILIBILI_REGION_URL = "https://api.bilibili.com/x/web-interface/ranking/region"
 BILIBILI_CATEGORY_RIDS = {
     "all": "0",
     "life": "160",
-    "travel": "96",
+    "travel": "250",
     "knowledge": "36",
     "food": "211",
     "entertainment": "5",
