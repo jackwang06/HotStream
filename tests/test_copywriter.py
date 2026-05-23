@@ -21,6 +21,8 @@ def test_build_deepseek_messages_includes_topic_and_user_brief():
     assert messages[1]["role"] == "user"
     assert "AI 应用爆发" in messages[1]["content"]
     assert "适合公众号，300 字以内" in messages[1]["content"]
+    assert "前山牧场四季牧歌民俗风情园" in messages[1]["content"]
+    assert "平均海拔约 2400 米" in messages[1]["content"]
 
 
 def test_build_deepseek_messages_asks_for_finished_post_not_writing_advice():
@@ -70,6 +72,28 @@ def test_build_default_temporary_prompt_contains_topic_and_user_brief():
     assert "12345" in prompt
     assert "讨论升温" in prompt
     assert "公众号，300 字以内" in prompt
+    assert "前山牧场四季牧歌民俗风情园" in prompt
+    assert "所有生成推文必须服务于" in prompt
+
+
+def test_build_default_temporary_prompt_includes_qwen_video_analysis_for_bilibili():
+    prompt = build_default_temporary_prompt(
+        topic={"title": "草原旅行视频", "source": "B站", "url": "https://www.bilibili.com/video/BVTEST"},
+        brief="写成推广推文",
+        qwen_analysis={
+            "summary": "视频呈现开阔草原和户外松弛感",
+            "visual_keywords": ["草原", "星空"],
+            "usable_facts": ["视频标题提到草原旅行"],
+            "risks": ["不能声称视频拍摄地为前山牧场"],
+        },
+    )
+
+    assert "Qwen2.5-VL 视频分析" in prompt
+    assert "视频呈现开阔草原和户外松弛感" in prompt
+    assert "草原" in prompt
+    assert "不能声称视频拍摄地为前山牧场" in prompt
+    assert "前山牧场四季牧歌" in prompt
+    assert "不要编造" in prompt
 
 
 def test_default_global_prompt_is_exposed_for_ui_editing():

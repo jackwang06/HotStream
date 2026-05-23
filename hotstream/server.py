@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from hotstream.copywriter import DEFAULT_GLOBAL_PROMPT, build_default_temporary_prompt, generate_copy_with_deepseek
 from hotstream.image_scraper import fetch_related_images
 from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics
+from hotstream.video_analyzer import analyze_video_with_qwen
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UI_DIR = PROJECT_ROOT / "ui"
@@ -33,11 +34,21 @@ def _normalize_source(source: str) -> str:
         "小红书": "xiaohongshu",
         "xiaohongshu": "xiaohongshu",
         "xhs": "xiaohongshu",
+        "bilibili": "bilibili",
+        "b站": "bilibili",
+        "哔哩哔哩": "bilibili",
+        "bili": "bilibili",
     }
     return aliases.get(normalized, normalized)
 
 
-def build_hot_topics_response(limit: int = 20, source: str = "toutiao") -> tuple[int, dict[str, str], bytes]:
+def build_hot_topics_response(
+    limit: int = 20,
+    source: str = "toutiao",
+    keyword: str | None = None,
+    category: str | None = None,
+    sort: str | None = None,
+) -> tuple[int, dict[str, str], bytes]:
     """Build the hot topics JSON response."""
     source_key = _normalize_source(source)
     source_label = SOURCE_LABELS.get(source_key, source_key)
@@ -46,7 +57,10 @@ def build_hot_topics_response(limit: int = 20, source: str = "toutiao") -> tuple
         "Cache-Control": "no-store",
     }
     try:
-        topics = fetch_hot_topics(source_key, limit=limit)
+        fetch_kwargs: dict[str, Any] = {"limit": limit}
+        if source_key == "bilibili" or keyword or category or sort:
+            fetch_kwargs.update({"keyword": keyword, "category": category, "sort": sort})
+        topics = fetch_hot_topics(source_key, **fetch_kwargs)
         body = _json_bytes({
             "success": True,
             "source": source_label,
@@ -88,6 +102,8 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
     api_key = str(payload.get("api_key") or "").strip()
     global_prompt = str(payload.get("global_prompt") or "").strip() or None
     temporary_prompt = str(payload.get("temporary_prompt") or "").strip() or None
+    qwen_analysis = payload.get("qwen_analysis") if isinstance(payload.get("qwen_analysis"), dict) else None
+    source_images = payload.get("source_images") if isinstance(payload.get("source_images"), list) else []
     title = str(topic.get("title") or "").strip()
     if not title:
         return 400, headers, _json_bytes({"success": False, "error": "缺少热点标题，无法生成文案"})
@@ -95,7 +111,7 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
         return 400, headers, _json_bytes({"success": False, "error": "请先在高级设置里填写 DeepSeek API Key"})
 
     try:
-        kwargs: dict[str, Any] = {"topic": topic, "brief": brief, "api_key": api_key}
+        kwargs: dict[str, Any] = {"topic": topic, "brief": brief, "api_key": api_key, "qwen_analysis": qwen_analysis}
         if global_prompt is not None:
             kwargs["global_prompt"] = global_prompt
         if temporary_prompt is not None:
@@ -105,14 +121,25 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
             images_future = executor.submit(fetch_related_images, title, limit=30)
             copy_text = copy_future.result()
             try:
-                images = images_future.result()
+                related_images = images_future.result()
             except Exception:
-                images = []
+                related_images = []
+        images = [item for item in source_images if isinstance(item, dict)] + related_images
         filename = f"{_safe_filename(title)}.txt"
+        draft = {
+            "title": f"前山牧场四季牧歌｜{title}",
+            "content": copy_text,
+            "topic": topic,
+            "images": images,
+            "analysis": qwen_analysis,
+            "blocks": [],
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        }
         body = _json_bytes({
             "success": True,
             "copy": copy_text,
             "images": images,
+            "draft": draft,
             "filename": filename,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -139,12 +166,44 @@ def build_prompts_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]
 
     topic = payload.get("topic") or {}
     brief = str(payload.get("brief") or "")
+    qwen_analysis = payload.get("qwen_analysis") if isinstance(payload.get("qwen_analysis"), dict) else None
     body = _json_bytes({
         "success": True,
         "global_prompt": DEFAULT_GLOBAL_PROMPT,
-        "temporary_prompt": build_default_temporary_prompt(topic=topic, brief=brief),
+        "temporary_prompt": build_default_temporary_prompt(topic=topic, brief=brief, qwen_analysis=qwen_analysis),
     })
     return 200, headers, body
+
+
+def build_video_analysis_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
+    """Build the /api/analyze-video JSON response."""
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+    }
+    try:
+        payload = json.loads(raw_body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return 400, headers, _json_bytes({"success": False, "error": "请求 JSON 格式不正确"})
+    topic = payload.get("topic") or {}
+    api_key = str(payload.get("api_key") or "").strip()
+    model = str(payload.get("model") or "").strip() or None
+    if not api_key:
+        return 400, headers, _json_bytes({"success": False, "error": "请先填写 Qwen API Key"})
+    if not str(topic.get("title") or "").strip():
+        return 400, headers, _json_bytes({"success": False, "error": "缺少待分析的视频标题"})
+    try:
+        result = analyze_video_with_qwen(topic=topic, api_key=api_key, model=model)
+        body = _json_bytes({
+            "success": True,
+            "analysis": result.get("analysis") or {},
+            "raw_text": result.get("raw_text") or "",
+            "images": result.get("images") or [],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return 200, headers, body
+    except Exception as exc:
+        return 502, headers, _json_bytes({"success": False, "error": str(exc), "analysis": {}, "images": []})
 
 
 def build_proxy_image_response(image_url: str, timeout: int = 12) -> tuple[int, dict[str, str], bytes]:
@@ -203,9 +262,18 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
                 except (TypeError, ValueError):
                     limit = 20
             source = params.get("source", ["toutiao"])[0]
+            keyword = params.get("keyword", [""])[0]
+            category = params.get("category", [""])[0]
+            sort = params.get("sort", [""])[0]
             if parsed.path == "/api/toutiao-hot":
                 source = "toutiao"
-            status, headers, body = build_hot_topics_response(limit=limit, source=source)
+            status, headers, body = build_hot_topics_response(
+                limit=limit,
+                source=source,
+                keyword=keyword or None,
+                category=category or None,
+                sort=sort or None,
+            )
             self.send_response(status)
             for key, value in headers.items():
                 self.send_header(key, value)
@@ -230,7 +298,7 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler method name
         parsed = urlparse(self.path)
-        if parsed.path in {"/api/generate-copy", "/api/prompts"}:
+        if parsed.path in {"/api/generate-copy", "/api/prompts", "/api/analyze-video"}:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -238,6 +306,8 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
             raw_body = self.rfile.read(content_length) if content_length else b"{}"
             if parsed.path == "/api/prompts":
                 status, headers, body = build_prompts_response(raw_body)
+            elif parsed.path == "/api/analyze-video":
+                status, headers, body = build_video_analysis_response(raw_body)
             else:
                 status, headers, body = build_copy_response(raw_body)
             self.send_response(status)

@@ -64,3 +64,28 @@ def test_editor_removes_low_value_divider_action_and_adds_draft_import():
     assert "id=\"loadDraftBtn\"" in content
     assert "载入本地草稿" in content
     assert "下次从主页点“继续编辑草稿”" in content
+
+
+def test_home_page_has_bilibili_video_controls_and_qwen_flow():
+    content = read_ui_file("index.html")
+
+    assert 'value="bilibili"' in content
+    assert "B站视频" in content
+    assert 'id="bilibiliCategory"' in content
+    assert 'id="qwenApiKey"' in content
+    assert "hotstream.qwenApiKey" in content
+    assert 'id="videoAnalysisOutput"' in content
+    assert "/api/analyze-video" in content
+    assert "qwen_analysis" in content
+    assert "source_images" in content
+    assert "前山牧场四季牧歌" in content
+
+
+def test_home_page_bilibili_query_is_sent_to_backend_not_only_local_filter():
+    content = read_ui_file("index.html")
+
+    assert "params.set('keyword'" in content
+    assert "params.set('category'" in content
+    assert "params.set('sort', 'traffic_desc')" in content
+    assert "bilibiliCategory.value" in content
+    assert "/api/hot-topics?${params.toString()}" in content

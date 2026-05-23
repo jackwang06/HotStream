@@ -23,7 +23,7 @@ def test_build_copy_response_returns_generated_copy_and_related_images_json():
     assert payload["copy"] == "生成后的文案"
     assert payload["images"] == image_results
     assert payload["filename"].endswith(".txt")
-    generate.assert_called_once_with(topic=request_payload["topic"], brief="适合公众号开头", api_key="sk-ui-test")
+    generate.assert_called_once_with(topic=request_payload["topic"], brief="适合公众号开头", api_key="sk-ui-test", qwen_analysis=None)
     fetch_images.assert_called_once_with("AI 应用爆发", limit=30)
 
 
@@ -46,7 +46,36 @@ def test_build_copy_response_passes_prompt_overrides_to_deepseek():
         api_key="sk-ui-test",
         global_prompt="你是全局角色",
         temporary_prompt="这一次只写三句话",
+        qwen_analysis=None,
     )
+
+
+def test_build_copy_response_passes_qwen_analysis_and_video_images():
+    request_payload = {
+        "topic": {"title": "草原旅行视频", "source": "B站", "cover": "https://example.com/cover.jpg"},
+        "brief": "写成前山牧场推广推文",
+        "api_key": "sk-ui-test",
+        "qwen_analysis": {"summary": "草原松弛感", "visual_keywords": ["草原"]},
+        "source_images": [{"url": "https://example.com/cover.jpg", "thumbnail": "https://example.com/cover.jpg", "title": "B站视频封面", "source": "B站封面"}],
+    }
+
+    with patch("hotstream.server.generate_copy_with_deepseek", return_value="生成后的文案") as generate, \
+         patch("hotstream.server.fetch_related_images", return_value=[]) as fetch_images:
+        status, headers, body = build_copy_response(json.dumps(request_payload).encode("utf-8"))
+
+    payload = json.loads(body.decode("utf-8"))
+    assert status == 200
+    assert payload["images"][0]["source"] == "B站封面"
+    assert payload["draft"]["topic"]["source"] == "B站"
+    assert payload["draft"]["analysis"]["summary"] == "草原松弛感"
+    assert "前山牧场四季牧歌" in payload["draft"]["title"]
+    generate.assert_called_once_with(
+        topic=request_payload["topic"],
+        brief="写成前山牧场推广推文",
+        api_key="sk-ui-test",
+        qwen_analysis=request_payload["qwen_analysis"],
+    )
+    fetch_images.assert_called_once_with("草原旅行视频", limit=30)
 
 
 def test_build_copy_response_requires_api_key_from_advanced_settings():
