@@ -396,6 +396,41 @@
       gap: 10px;
     }
 
+    .bilibili-tools,
+    .video-analysis {
+      display: grid;
+      gap: 10px;
+      margin: 12px 0 14px;
+    }
+
+    .bilibili-tools {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .video-analysis {
+      padding: 14px;
+      border: 1px solid #edf0f3;
+      border-radius: 18px;
+      background: #fbfffe;
+    }
+
+    .video-analysis.hidden,
+    .bilibili-tools.hidden {
+      display: none;
+    }
+
+    .video-analysis-output {
+      min-height: 72px;
+      padding: 12px;
+      border: 1px dashed #d1d5db;
+      border-radius: 14px;
+      color: var(--muted);
+      background: #fff;
+      font-size: 13px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+
     .prompt-tools .ghost-btn {
       flex: 0 1 auto;
       padding: 10px 12px;
@@ -553,7 +588,7 @@
     </header>
 
     <section class="hero">
-      <h1>抓热点，生成文案。</h1>
+      <h1>前山如画，四季成歌</h1>
     </section>
 
     <section class="workspace">
@@ -567,8 +602,22 @@
               <option value="toutiao">今日头条</option>
               <option value="xiaohongshu">小红书</option>
               <option value="zhihu">知乎</option>
+              <option value="bilibili">B站视频</option>
             </select>
-            <input id="keyword" placeholder="可选关键词，例如：AI、财经" />
+            <input id="keyword" placeholder="可选关键词，例如：草原、避暑、团建" />
+          </div>
+          <div class="bilibili-tools hidden" id="bilibiliTools">
+            <select id="bilibiliCategory" aria-label="B站视频分类">
+              <option value="all">全部热门</option>
+              <option value="life">生活</option>
+              <option value="travel">出行/旅行</option>
+              <option value="food">美食</option>
+              <option value="knowledge">知识</option>
+              <option value="technology">科技</option>
+              <option value="entertainment">娱乐</option>
+              <option value="documentary">纪录片</option>
+            </select>
+            <span class="hint">B站按公开播放量从高到低展示；输入关键词会请求 B站搜索接口。</span>
           </div>
           <button class="main-btn" id="fetchBtn">刷新今日头条热点</button>
           <div class="fetch-meta" id="fetchMeta">进入页面后自动抓取，每 60 秒刷新一次。</div>
@@ -589,11 +638,19 @@
             <summary>高级设置</summary>
             <div class="prompt-editor">
               <div class="prompt-field">
-                <label for="deepseekApiKey">DeepSeek API Key <span>必填</span></label>
+                <label for="deepseekApiKey">DeepSeek API Key <span>必填，用于生成推文</span></label>
                 <div class="secret-row">
                   <input id="deepseekApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴 DeepSeek API Key，例如 sk-..." />
                   <button class="secret-toggle" id="toggleApiKeyBtn" type="button" aria-pressed="false">显示</button>
                 </div>
+              </div>
+              <div class="prompt-field">
+                <label for="qwenApiKey">Qwen2.5-VL API Key <span>B站视频分析时填写</span></label>
+                <input id="qwenApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴兼容 DashScope 的 Qwen API Key" />
+              </div>
+              <div class="video-analysis hidden" id="videoAnalysisPanel">
+                <button class="ghost-btn" id="analyzeVideoBtn" type="button">用 Qwen2.5-VL 分析所选 B站视频</button>
+                <div class="video-analysis-output" id="videoAnalysisOutput">选择 B站视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。</div>
               </div>
               <div class="prompt-field">
                 <label for="globalPrompt">全局提示词</label>
@@ -635,6 +692,10 @@
     let selectedTopic = null;
     let lastCopyFilename = 'hotstream-copy.txt';
     let lastGeneratedImages = [];
+    let lastGeneratedDraft = null;
+    let lastVideoAnalysis = null;
+    let lastVideoImages = [];
+    let lastAnalyzedVideoUrl = '';
     const topicList = document.getElementById('topicList');
     const output = document.getElementById('copyOutput');
     const imageSection = document.getElementById('imageSection');
@@ -643,8 +704,14 @@
     const fetchMeta = document.getElementById('fetchMeta');
     const keywordInput = document.getElementById('keyword');
     const sourceSelect = document.getElementById('source');
+    const bilibiliTools = document.getElementById('bilibiliTools');
+    const bilibiliCategory = document.getElementById('bilibiliCategory');
     const briefInput = document.getElementById('brief');
     const deepseekApiKeyInput = document.getElementById('deepseekApiKey');
+    const qwenApiKeyInput = document.getElementById('qwenApiKey');
+    const analyzeVideoBtn = document.getElementById('analyzeVideoBtn');
+    const videoAnalysisPanel = document.getElementById('videoAnalysisPanel');
+    const videoAnalysisOutput = document.getElementById('videoAnalysisOutput');
     const toggleApiKeyBtn = document.getElementById('toggleApiKeyBtn');
     const globalPromptInput = document.getElementById('globalPrompt');
     const temporaryPromptInput = document.getElementById('temporaryPrompt');
@@ -653,6 +720,24 @@
 
     function currentSourceLabel() {
       return sourceSelect.options[sourceSelect.selectedIndex].textContent;
+    }
+
+    function isBilibiliMode() {
+      return sourceSelect.value === 'bilibili';
+    }
+
+    function resetVideoAnalysis(text = '选择 B站视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。') {
+      lastVideoAnalysis = null;
+      lastVideoImages = [];
+      lastAnalyzedVideoUrl = '';
+      videoAnalysisOutput.textContent = text;
+    }
+
+    function updateSourceModeUI() {
+      const isBili = isBilibiliMode();
+      bilibiliTools.classList.toggle('hidden', !isBili);
+      videoAnalysisPanel.classList.toggle('hidden', !isBili);
+      if (!isBili) resetVideoAnalysis('切换到 B站视频后，可先分析视频内容。');
     }
 
     function showToast(text) {
@@ -726,7 +811,7 @@
         const response = await fetch('/api/prompts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic, brief })
+          body: JSON.stringify({ topic, brief, qwen_analysis: lastVideoAnalysis })
         });
         const payload = await response.json();
         if (!payload.success) throw new Error(payload.error || '提示词加载失败');
@@ -740,7 +825,7 @@
 
     function filteredTopics() {
       const keyword = keywordInput.value.trim().toLowerCase();
-      if (!keyword) return topics;
+      if (!keyword || isBilibiliMode()) return topics;
       return topics.filter(topic => topic.title.toLowerCase().includes(keyword));
     }
 
@@ -767,7 +852,10 @@
         document.querySelectorAll('.topic').forEach(el => el.classList.remove('selected'));
         item.classList.add('selected');
         selectedTopic = topics.find(topic => String(topic.rank) === item.dataset.rank);
-        briefInput.value = `请基于「${selectedTopic.title}」直接写一篇可发布的推文成稿，适合小红书/公众号开头，语气简洁、有信息量。不要输出写作建议或可选角度。`;
+        resetVideoAnalysis(isBilibiliMode() ? '已选择 B站视频。请填写 Qwen API Key 后点击“分析所选 B站视频”。' : '切换到 B站视频后，可先分析视频内容。');
+        briefInput.value = isBilibiliMode()
+          ? `请基于这个 B站视频热点和 Qwen 视频分析结果，写一篇宣传前山牧场四季牧歌民俗风情园的推文成稿，适合小红书/公众号，语气自然，不要硬广，不要编造视频拍摄地。`
+          : `请基于「${selectedTopic.title}」直接写一篇宣传前山牧场四季牧歌民俗风情园的推文成稿，适合小红书/公众号开头，语气简洁、有信息量。不要输出写作建议或可选角度。`;
         loadPromptsForCurrentTopic({ silent: true });
         showToast('已选择热点');
       }
@@ -794,7 +882,13 @@
       if (!silent) topicList.innerHTML = `<div class="empty">正在抓取${escapeHtml(sourceLabel)}热点...</div>`;
 
       try {
-        const response = await fetch(`/api/hot-topics?source=${encodeURIComponent(source)}&limit=20`, { cache: 'no-store' });
+        const params = new URLSearchParams({ source, limit: '20' });
+        if (isBilibiliMode()) {
+          params.set('sort', 'traffic_desc');
+          params.set('category', bilibiliCategory.value);
+          if (keywordInput.value.trim()) params.set('keyword', keywordInput.value.trim());
+        }
+        const response = await fetch(`/api/hot-topics?${params.toString()}`, { cache: 'no-store' });
         const payload = await response.json();
         if (!payload.success) throw new Error(payload.error || '抓取失败');
         topics = payload.topics || [];
@@ -814,9 +908,25 @@
     }
 
     fetchBtn.addEventListener('click', () => fetchHotTopics());
-    sourceSelect.addEventListener('change', () => fetchHotTopics());
-    keywordInput.addEventListener('input', renderTopics);
+    sourceSelect.addEventListener('change', () => {
+      updateSourceModeUI();
+      fetchHotTopics();
+    });
+    bilibiliCategory.addEventListener('change', () => {
+      if (isBilibiliMode()) fetchHotTopics();
+    });
+    keywordInput.addEventListener('input', () => {
+      if (isBilibiliMode()) return;
+      renderTopics();
+    });
+    keywordInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && isBilibiliMode()) fetchHotTopics();
+    });
     deepseekApiKeyInput.value = localStorage.getItem('hotstream.deepseekApiKey') || '';
+    qwenApiKeyInput.value = localStorage.getItem('hotstream.qwenApiKey') || '';
+    qwenApiKeyInput.addEventListener('input', () => {
+      localStorage.setItem('hotstream.qwenApiKey', qwenApiKeyInput.value);
+    });
     deepseekApiKeyInput.addEventListener('input', () => {
       localStorage.setItem('hotstream.deepseekApiKey', deepseekApiKeyInput.value);
     });
@@ -827,6 +937,61 @@
       toggleApiKeyBtn.setAttribute('aria-pressed', String(isHidden));
     });
     document.getElementById('resetPromptsBtn').addEventListener('click', () => loadPromptsForCurrentTopic());
+
+    function renderVideoAnalysis(analysis) {
+      if (!analysis) {
+        videoAnalysisOutput.textContent = '暂无视频分析结果。';
+        return;
+      }
+      const lines = [];
+      if (analysis.summary) lines.push(`概述：${analysis.summary}`);
+      if (Array.isArray(analysis.visual_keywords) && analysis.visual_keywords.length) lines.push(`视觉关键词：${analysis.visual_keywords.join('、')}`);
+      if (Array.isArray(analysis.scenes) && analysis.scenes.length) lines.push(`场景：${analysis.scenes.join('、')}`);
+      if (Array.isArray(analysis.audience_emotion) && analysis.audience_emotion.length) lines.push(`受众情绪：${analysis.audience_emotion.join('、')}`);
+      if (Array.isArray(analysis.usable_facts) && analysis.usable_facts.length) lines.push(`可用事实：${analysis.usable_facts.join('、')}`);
+      if (Array.isArray(analysis.risks) && analysis.risks.length) lines.push(`风险提醒：${analysis.risks.join('、')}`);
+      videoAnalysisOutput.textContent = lines.join('\n') || JSON.stringify(analysis, null, 2);
+    }
+
+    analyzeVideoBtn.addEventListener('click', async () => {
+      if (!selectedTopic || selectedTopic.source !== 'B站') {
+        showToast('请先选择一个 B站视频');
+        return;
+      }
+      const qwenApiKey = qwenApiKeyInput.value.trim();
+      if (!qwenApiKey) {
+        showToast('请先填写 Qwen API Key');
+        qwenApiKeyInput.focus();
+        return;
+      }
+      analyzeVideoBtn.disabled = true;
+      analyzeVideoBtn.textContent = 'Qwen 正在分析视频...';
+      videoAnalysisOutput.textContent = 'Qwen2.5-VL 正在分析视频封面、标题、简介和公开流量数据...';
+      try {
+        const response = await fetch('/api/analyze-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: selectedTopic, api_key: qwenApiKey })
+        });
+        const payload = await response.json();
+        if (!payload.success) throw new Error(payload.error || '视频分析失败');
+        lastVideoAnalysis = payload.analysis || {};
+        lastVideoImages = payload.images || [];
+        lastAnalyzedVideoUrl = selectedTopic.url || selectedTopic.bvid || selectedTopic.title;
+        renderVideoAnalysis(lastVideoAnalysis);
+        if (lastVideoImages.length) renderImages(lastVideoImages);
+        await loadPromptsForCurrentTopic({ silent: true });
+        showToast('视频分析完成');
+      } catch (error) {
+        resetVideoAnalysis(`视频分析失败：${error.message}`);
+        showToast('视频分析失败');
+      } finally {
+        analyzeVideoBtn.disabled = false;
+        analyzeVideoBtn.textContent = '用 Qwen2.5-VL 分析所选 B站视频';
+      }
+    });
+
+    updateSourceModeUI();
     loadPromptsForCurrentTopic({ silent: true });
     fetchHotTopics({ silent: true });
     setInterval(() => fetchHotTopics({ silent: true }), 60000);
@@ -845,6 +1010,10 @@
       }
       const globalPrompt = globalPromptInput.value.trim();
       const temporaryPrompt = temporaryPromptInput.value.trim();
+      if (selectedTopic.source === 'B站' && (!lastVideoAnalysis || lastAnalyzedVideoUrl !== (selectedTopic.url || selectedTopic.bvid || selectedTopic.title))) {
+        showToast('请先用 Qwen 分析所选 B站视频');
+        return;
+      }
       const generateBtn = document.getElementById('generateBtn');
       generateBtn.disabled = true;
       generateBtn.textContent = 'DeepSeek 正在生成...';
@@ -860,13 +1029,16 @@
             brief,
             api_key: apiKey,
             global_prompt: globalPrompt,
-            temporary_prompt: temporaryPrompt
+            temporary_prompt: temporaryPrompt,
+            qwen_analysis: lastVideoAnalysis,
+            source_images: lastVideoImages
           })
         });
         const payload = await response.json();
         if (!payload.success) throw new Error(payload.error || '生成失败');
         output.textContent = payload.copy;
         lastGeneratedImages = payload.images || [];
+        lastGeneratedDraft = payload.draft || null;
         renderImages(lastGeneratedImages);
         lastCopyFilename = payload.filename || 'hotstream-copy.txt';
         showToast('文案和图片已生成');
@@ -883,11 +1055,12 @@
     document.getElementById('editContentBtn').addEventListener('click', () => {
       const text = getGeneratedText();
       if (!text) return showToast('请先生成文案再进入编辑页');
-      const draft = {
+      const draft = lastGeneratedDraft || {
         title: selectedTopic?.title || 'HotStream 文案',
         topic: selectedTopic,
         content: text,
         images: lastGeneratedImages,
+        analysis: lastVideoAnalysis,
         filename: lastCopyFilename,
         updated_at: new Date().toISOString()
       };
@@ -925,11 +1098,13 @@
       selectedTopic = null;
       lastCopyFilename = 'hotstream-copy.txt';
       lastGeneratedImages = [];
+      lastGeneratedDraft = null;
       briefInput.value = '';
       temporaryPromptInput.value = '';
       loadPromptsForCurrentTopic({ silent: true });
       output.textContent = '文案结果会显示在这里。';
       resetImagesPlaceholder();
+      resetVideoAnalysis();
       document.querySelectorAll('.topic').forEach(el => el.classList.remove('selected'));
       showToast('已清空');
     });

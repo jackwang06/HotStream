@@ -20,5 +20,10 @@ def test_vercel_python_handler_exists_and_serves_ui() -> None:
     assert "build_hot_topics_response" in handler
     assert "build_copy_response" in handler
     assert "build_proxy_image_response" in handler
+    assert "build_video_analysis_response" in handler
+    assert "keyword = params.get(\"keyword\"" in handler
+    assert "category = params.get(\"category\"" in handler
+    assert "sort = params.get(\"sort\"" in handler
+    assert '"/api/analyze-video"' in handler
     assert "_serve_static" in handler
     assert "UI_DIR" in handler

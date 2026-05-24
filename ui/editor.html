@@ -17,6 +17,7 @@
       --danger: #ef4444;
       --radius: 22px;
       --shadow: 0 24px 70px rgba(17, 24, 39, .08);
+      --editor-work-area-height: calc(100vh - 382px);
     }
 
     * { box-sizing: border-box; }
@@ -159,7 +160,7 @@
     .block-editor {
       display: grid;
       gap: 12px;
-      min-height: calc(100vh - 382px);
+      min-height: var(--editor-work-area-height);
       padding: 12px;
       border: 1px dashed #d8dee8;
       border-radius: 18px;
@@ -230,7 +231,7 @@
     .image-caption { margin-top: 8px; color: var(--muted); font-size: 12px; }
 
     .preview-wrap {
-      height: calc(100vh - 184px);
+      min-height: var(--editor-work-area-height);
       overflow: auto;
       padding: 18px;
       background: #f3f4f6;
@@ -299,7 +300,7 @@
       .workspace { grid-template-columns: 1fr; }
       .panel { min-height: auto; }
       .block-editor { min-height: 360px; }
-      .preview-wrap { height: 620px; }
+      .preview-wrap { min-height: 360px; }
       .material-grid { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 620px) {

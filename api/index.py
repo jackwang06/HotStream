@@ -17,6 +17,7 @@ from hotstream.server import (  # noqa: E402
     build_hot_topics_response,
     build_prompts_response,
     build_proxy_image_response,
+    build_video_analysis_response,
 )
 
 
@@ -69,9 +70,20 @@ class handler(BaseHTTPRequestHandler):
                 except (TypeError, ValueError):
                     limit = 20
             source = params.get("source", ["toutiao"])[0]
+            keyword = params.get("keyword", [""])[0]
+            category = params.get("category", [""])[0]
+            sort = params.get("sort", [""])[0]
             if parsed.path == "/api/toutiao-hot":
                 source = "toutiao"
-            self._send(*build_hot_topics_response(limit=limit, source=source))
+            self._send(
+                *build_hot_topics_response(
+                    limit=limit,
+                    source=source,
+                    keyword=keyword or None,
+                    category=category or None,
+                    sort=sort or None,
+                )
+            )
             return
 
         if parsed.path == "/api/proxy-image":
@@ -84,7 +96,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - Vercel handler method name
         parsed = urlparse(self.path)
-        if parsed.path in {"/api/generate-copy", "/api/prompts"}:
+        if parsed.path in {"/api/generate-copy", "/api/prompts", "/api/analyze-video"}:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -92,6 +104,8 @@ class handler(BaseHTTPRequestHandler):
             raw_body = self.rfile.read(content_length) if content_length else b"{}"
             if parsed.path == "/api/prompts":
                 self._send(*build_prompts_response(raw_body))
+            elif parsed.path == "/api/analyze-video":
+                self._send(*build_video_analysis_response(raw_body))
             else:
                 self._send(*build_copy_response(raw_body))
             return
