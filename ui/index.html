@@ -922,14 +922,45 @@
     keywordInput.addEventListener('keydown', event => {
       if (event.key === 'Enter' && isBilibiliMode()) fetchHotTopics();
     });
-    deepseekApiKeyInput.value = localStorage.getItem('hotstream.deepseekApiKey') || '';
-    qwenApiKeyInput.value = localStorage.getItem('hotstream.qwenApiKey') || '';
-    qwenApiKeyInput.addEventListener('input', () => {
-      localStorage.setItem('hotstream.qwenApiKey', qwenApiKeyInput.value);
-    });
-    deepseekApiKeyInput.addEventListener('input', () => {
-      localStorage.setItem('hotstream.deepseekApiKey', deepseekApiKeyInput.value);
-    });
+    // ── Load saved settings from server ──
+    async function loadServerSettings() {
+      try {
+        const response = await fetch('/api/settings', { cache: 'no-store' });
+        const data = await response.json();
+        if (data.success) {
+          if (data.deepseek_api_key) deepseekApiKeyInput.value = data.deepseek_api_key;
+          if (data.qwen_api_key) qwenApiKeyInput.value = data.qwen_api_key;
+          if (data.global_prompt) globalPromptInput.value = data.global_prompt;
+        }
+      } catch (e) {
+        // server not available, use empty defaults
+      }
+    }
+
+    // ── Save settings to server ──
+    let settingsSaveTimer = null;
+    function autoSaveSettings() {
+      clearTimeout(settingsSaveTimer);
+      settingsSaveTimer = setTimeout(async () => {
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              deepseek_api_key: deepseekApiKeyInput.value.trim(),
+              qwen_api_key: qwenApiKeyInput.value.trim(),
+              global_prompt: globalPromptInput.value.trim(),
+            }),
+          });
+        } catch (e) { /* network issue, silently ignore */ }
+      }, 1500);
+    }
+
+    deepseekApiKeyInput.addEventListener('input', autoSaveSettings);
+    qwenApiKeyInput.addEventListener('input', autoSaveSettings);
+    globalPromptInput.addEventListener('input', autoSaveSettings);
+
+    loadServerSettings();
     toggleApiKeyBtn.addEventListener('click', () => {
       const isHidden = deepseekApiKeyInput.type === 'password';
       deepseekApiKeyInput.type = isHidden ? 'text' : 'password';
@@ -1042,6 +1073,22 @@
         renderImages(lastGeneratedImages);
         lastCopyFilename = payload.filename || 'hotstream-copy.txt';
         showToast('文案和图片已生成');
+        // record to history in background
+        (async () => {
+          try {
+            await fetch('/api/history', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                topic_title: selectedTopic?.title || '',
+                copy_text: payload.copy || '',
+                hot_value: String(selectedTopic?.hot_value || ''),
+                source: selectedTopic?.source || '',
+                chars: (payload.copy || '').length,
+              }),
+            });
+          } catch (e) { /* network issue, silently ignore */ }
+        })();
       } catch (error) {
         output.textContent = `文案生成失败：${error.message}`;
         resetImagesPlaceholder('文案生成失败，未展示图片。');
@@ -1061,19 +1108,62 @@
         content: text,
         images: lastGeneratedImages,
         analysis: lastVideoAnalysis,
-        filename: lastCopyFilename,
-        updated_at: new Date().toISOString()
+        filename: lastCopyFilename
       };
-      localStorage.setItem(EDIT_IMPORT_KEY, JSON.stringify(draft));
-      window.location.href = '/editor.html';
+      // save draft to DB in background, then navigate
+      const savePromise = (async () => {
+        try {
+          const resp = await fetch('/api/drafts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: draft.title,
+              content_blocks: (draft.content_blocks || draft.content || text)
+                ? [draft.content_blocks || draft.content || text]
+                : [],
+              images: draft.images || [],
+            }),
+          });
+          const data = await resp.json();
+          if (data.success && data.draft) {
+            draft.id = data.draft.id;
+          }
+        } catch (e) { /* ignore */ }
+      })();
+      // still pass via sessionStorage for editor page compatibility
+      const payload = {
+        ...draft,
+        _savedAt: new Date().toISOString()
+      };
+      sessionStorage.setItem('hotstream.sessionDraft', JSON.stringify(payload));
+      savePromise.then(() => navigateToEditor());
     });
 
-    document.getElementById('continueDraftBtn').addEventListener('click', () => {
-      if (!localStorage.getItem(EDIT_LIVE_KEY)) {
-        showToast('暂无本地草稿；生成文案后可进入编辑页保存');
-        return;
+    function navigateToEditor(delay = 20) {
+      setTimeout(() => { window.location.href = '/editor.html'; }, delay);
+    }
+
+    document.getElementById('continueDraftBtn').addEventListener('click', async () => {
+      try {
+        const resp = await fetch('/api/drafts', { cache: 'no-store' });
+        const data = await resp.json();
+        if (data.success && data.drafts && data.drafts.length > 0) {
+          const latest = data.drafts[0];
+          sessionStorage.setItem('hotstream.sessionDraft', JSON.stringify({
+            id: latest.id,
+            title: latest.title,
+            content: (latest.content_blocks || []).join('\n\n'),
+            images: latest.images || [],
+            _fromDb: true,
+            _savedAt: new Date().toISOString(),
+          }));
+        } else {
+          sessionStorage.setItem('hotstream.sessionDraft', JSON.stringify({ _fromDb: true, _savedAt: new Date().toISOString() }));
+        }
+      } catch (e) {
+        sessionStorage.setItem('hotstream.sessionDraft', JSON.stringify({ _fromDb: true, _savedAt: new Date().toISOString() }));
       }
-      window.location.href = '/editor.html';
+      navigateToEditor();
     });
 
     document.getElementById('copyBtn').addEventListener('click', async () => {
