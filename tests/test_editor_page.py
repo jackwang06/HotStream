@@ -80,7 +80,8 @@ def test_home_page_has_bilibili_video_controls_and_qwen_flow():
     assert "B站视频" in content
     assert 'id="bilibiliCategory"' in content
     assert 'id="qwenApiKey"' in content
-    assert "hotstream.qwenApiKey" in content
+    assert "/api/settings" in content
+    assert "loadServerSettings" in content
     assert 'id="videoAnalysisOutput"' in content
     assert "/api/analyze-video" in content
     assert "qwen_analysis" in content

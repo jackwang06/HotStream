@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "python -V",
+  "installCommand": "python3 -m pip install psycopg2-binary",
   "buildCommand": "python -V",
   "rewrites": [
     {

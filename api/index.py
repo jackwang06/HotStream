@@ -14,9 +14,13 @@ from hotstream.server import (  # noqa: E402
     UI_DIR,
     _json_bytes,
     build_copy_response,
+    build_drafts_crud_response,
+    build_history_response,
     build_hot_topics_response,
     build_prompts_response,
     build_proxy_image_response,
+    build_settings_get_response,
+    build_settings_save_response,
     build_video_analysis_response,
 )
 
@@ -92,11 +96,29 @@ class handler(BaseHTTPRequestHandler):
             self._send(*build_proxy_image_response(image_url))
             return
 
+        if parsed.path == "/api/settings":
+            self._send(*build_settings_get_response())
+            return
+
+        if parsed.path == "/api/drafts" or parsed.path.startswith("/api/drafts/"):
+            draft_id = None
+            if parsed.path.startswith("/api/drafts/"):
+                try:
+                    draft_id = int(parsed.path.rsplit("/", 1)[-1])
+                except (ValueError, IndexError):
+                    pass
+            self._send(*build_drafts_crud_response("GET", raw_body=b"", draft_id=draft_id))
+            return
+
+        if parsed.path == "/api/history":
+            self._send(*build_history_response("GET", raw_body=b""))
+            return
+
         self._serve_static(parsed.path)
 
     def do_POST(self) -> None:  # noqa: N802 - Vercel handler method name
         parsed = urlparse(self.path)
-        if parsed.path in {"/api/generate-copy", "/api/prompts", "/api/analyze-video"}:
+        if parsed.path in {"/api/generate-copy", "/api/prompts", "/api/analyze-video", "/api/settings", "/api/drafts", "/api/history"}:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -106,6 +128,12 @@ class handler(BaseHTTPRequestHandler):
                 self._send(*build_prompts_response(raw_body))
             elif parsed.path == "/api/analyze-video":
                 self._send(*build_video_analysis_response(raw_body))
+            elif parsed.path == "/api/settings":
+                self._send(*build_settings_save_response(raw_body))
+            elif parsed.path == "/api/drafts":
+                self._send(*build_drafts_crud_response("POST", raw_body=raw_body))
+            elif parsed.path == "/api/history":
+                self._send(*build_history_response("POST", raw_body=raw_body))
             else:
                 self._send(*build_copy_response(raw_body))
             return

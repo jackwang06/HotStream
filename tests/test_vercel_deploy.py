@@ -7,7 +7,7 @@ from pathlib import Path
 def test_vercel_config_routes_to_python_handler() -> None:
     config = json.loads(Path("vercel.json").read_text(encoding="utf-8"))
     assert config["version"] == 2
-    assert config["installCommand"] == "python -V"
+    assert config["installCommand"] == "python3 -m pip install psycopg2-binary"
     assert config["buildCommand"] == "python -V"
     rewrites = config["rewrites"]
     assert {"source": "/api/(.*)", "destination": "/api/index.py"} in rewrites
@@ -21,6 +21,13 @@ def test_vercel_python_handler_exists_and_serves_ui() -> None:
     assert "build_copy_response" in handler
     assert "build_proxy_image_response" in handler
     assert "build_video_analysis_response" in handler
+    assert "build_settings_get_response" in handler
+    assert "build_settings_save_response" in handler
+    assert "build_drafts_crud_response" in handler
+    assert "build_history_response" in handler
+    assert '"/api/settings"' in handler
+    assert '"/api/drafts"' in handler
+    assert '"/api/history"' in handler
     assert "keyword = params.get(\"keyword\"" in handler
     assert "category = params.get(\"category\"" in handler
     assert "sort = params.get(\"sort\"" in handler

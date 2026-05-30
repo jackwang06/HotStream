@@ -292,13 +292,46 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if parsed.path == "/api/settings":
+            status, headers, body = build_settings_get_response()
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/api/drafts" or parsed.path.startswith("/api/drafts/"):
+            draft_id = None
+            if parsed.path.startswith("/api/drafts/"):
+                try:
+                    draft_id = int(parsed.path.rsplit("/", 1)[-1])
+                except (ValueError, IndexError):
+                    pass
+            status, headers, body = build_drafts_crud_response("GET", raw_body=b"", draft_id=draft_id)
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/api/history":
+            status, headers, body = build_history_response("GET", raw_body=b"")
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if parsed.path == "/":
             self.path = "/index.html"
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler method name
         parsed = urlparse(self.path)
-        if parsed.path in {"/api/generate-copy", "/api/prompts", "/api/analyze-video"}:
+        if parsed.path in {"/api/generate-copy", "/api/prompts", "/api/analyze-video", "/api/settings", "/api/drafts", "/api/history"}:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -308,6 +341,12 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
                 status, headers, body = build_prompts_response(raw_body)
             elif parsed.path == "/api/analyze-video":
                 status, headers, body = build_video_analysis_response(raw_body)
+            elif parsed.path == "/api/settings":
+                status, headers, body = build_settings_save_response(raw_body)
+            elif parsed.path == "/api/drafts":
+                status, headers, body = build_drafts_crud_response("POST", raw_body=raw_body)
+            elif parsed.path == "/api/history":
+                status, headers, body = build_history_response("POST", raw_body=raw_body)
             else:
                 status, headers, body = build_copy_response(raw_body)
             self.send_response(status)
@@ -321,6 +360,177 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.end_headers()
         self.wfile.write(_json_bytes({"success": False, "error": "Not found"}))
+
+
+def build_settings_get_response() -> tuple[int, dict[str, str], bytes]:
+    """GET /api/settings — return saved settings or defaults."""
+    from hotstream.db import connect_db, load_settings  # noqa: E402
+    headers = {"Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store"}
+    try:
+        conn = connect_db()
+        saved = load_settings(conn)
+        conn.close()
+    except Exception:
+        saved = None
+    return 200, headers, _json_bytes({
+        "success": True,
+        "deepseek_api_key": saved.deepseek_api_key if saved else "",
+        "qwen_api_key": saved.qwen_api_key if saved else "",
+        "global_prompt": saved.global_prompt if (saved and saved.global_prompt) else DEFAULT_GLOBAL_PROMPT,
+    })
+
+
+def build_settings_save_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
+    """POST /api/settings — save settings to DB."""
+    from hotstream.db import connect_db, load_settings, save_settings  # noqa: E402
+    headers = {"Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store"}
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return 400, headers, _json_bytes({"success": False, "error": "Invalid JSON"})
+    try:
+        conn = connect_db()
+        save_settings(
+            conn,
+            deepseek_api_key=str(payload.get("deepseek_api_key", "")).strip(),
+            qwen_api_key=str(payload.get("qwen_api_key", "")).strip(),
+            global_prompt=str(payload.get("global_prompt", "")).strip(),
+        )
+        # return the saved values
+        saved = load_settings(conn)
+        conn.close()
+        return 200, headers, _json_bytes({
+            "success": True,
+            "deepseek_api_key": saved.deepseek_api_key if saved else "",
+            "qwen_api_key": saved.qwen_api_key if saved else "",
+            "global_prompt": saved.global_prompt if (saved and saved.global_prompt) else DEFAULT_GLOBAL_PROMPT,
+        })
+    except Exception as exc:
+        return 502, headers, _json_bytes({"success": False, "error": str(exc)})
+
+
+def build_drafts_crud_response(
+    method: str,
+    raw_body: bytes,
+    draft_id: int | None = None,
+) -> tuple[int, dict[str, str], bytes]:
+    """GET/POST/PUT/DELETE /api/drafts[/<id>]."""
+    from hotstream.db import connect_db, create_draft, delete_draft, get_all_drafts, get_draft, update_draft  # noqa: E402
+    headers = {"Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store"}
+    try:
+        conn = connect_db()
+    except Exception as exc:
+        return 502, headers, _json_bytes({"success": False, "error": str(exc)})
+    try:
+        if method == "GET":
+            if draft_id is not None:
+                draft = get_draft(conn, draft_id=draft_id)
+                result = {"success": True, "draft": _draft_row_to_dict(draft)} if draft else {"success": False, "error": "Draft not found"}
+                status = 200 if draft else 404
+            else:
+                drafts = get_all_drafts(conn)
+                result = {"success": True, "drafts": [_draft_row_to_dict(d) for d in drafts]}
+                status = 200
+        elif method == "POST":
+            payload = json.loads(raw_body.decode("utf-8"))
+            draft = create_draft(
+                conn,
+                title=str(payload.get("title", "")).strip(),
+                content_blocks=json.dumps(payload.get("content_blocks", [])),
+                images=json.dumps(payload.get("images", [])),
+            )
+            result = {"success": True, "draft": _draft_row_to_dict(draft)}
+            status = 200
+        elif method == "PUT":
+            if draft_id is None:
+                return 400, headers, _json_bytes({"success": False, "error": "Missing draft ID"})
+            payload = json.loads(raw_body.decode("utf-8"))
+            draft = update_draft(
+                conn,
+                draft_id=draft_id,
+                title=str(payload.get("title", "")).strip(),
+                content_blocks=json.dumps(payload.get("content_blocks", [])),
+                images=json.dumps(payload.get("images", [])),
+            )
+            result = {"success": True, "draft": _draft_row_to_dict(draft)}
+            status = 200
+        elif method == "DELETE":
+            if draft_id is None:
+                return 400, headers, _json_bytes({"success": False, "error": "Missing draft ID"})
+            delete_draft(conn, draft_id=draft_id)
+            result = {"success": True}
+            status = 200
+        else:
+            return 405, headers, _json_bytes({"success": False, "error": "Method not allowed"})
+    except Exception as exc:
+        result = {"success": False, "error": str(exc)}
+        status = 502
+    finally:
+        conn.close()
+    return status, headers, _json_bytes(result)
+
+
+def _draft_row_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "title": row.title,
+        "content_blocks": json.loads(row.content_blocks) if row.content_blocks else [],
+        "images": json.loads(row.images) if row.images else [],
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def build_history_response(
+    method: str,
+    raw_body: bytes,
+) -> tuple[int, dict[str, str], bytes]:
+    """GET/POST /api/history."""
+    from hotstream.db import connect_db, get_history, record_history  # noqa: E402
+    headers = {"Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store"}
+    try:
+        conn = connect_db()
+    except Exception as exc:
+        return 502, headers, _json_bytes({"success": False, "error": str(exc)})
+    try:
+        if method == "GET":
+            rows = get_history(conn, limit=50)
+            result = {
+                "success": True,
+                "history": [
+                    {
+                        "id": r.id,
+                        "topic_title": r.topic_title,
+                        "copy_text": r.copy_text,
+                        "hot_value": r.hot_value,
+                        "source": r.source,
+                        "chars": r.chars,
+                        "created_at": r.created_at,
+                    }
+                    for r in rows
+                ],
+            }
+            status = 200
+        elif method == "POST":
+            payload = json.loads(raw_body.decode("utf-8"))
+            row = record_history(
+                conn,
+                topic_title=str(payload.get("topic_title", "")),
+                copy_text=str(payload.get("copy_text", "")),
+                hot_value=str(payload.get("hot_value", "")),
+                source=str(payload.get("source", "")),
+                chars=int(payload.get("chars", 0)),
+            )
+            result = {"success": True, "id": row.id}
+            status = 200
+        else:
+            return 405, headers, _json_bytes({"success": False, "error": "Method not allowed"})
+    except Exception as exc:
+        result = {"success": False, "error": str(exc)}
+        status = 502
+    finally:
+        conn.close()
+    return status, headers, _json_bytes(result)
 
 
 def run_server(host: str = "127.0.0.1", port: int = 5173) -> None:
