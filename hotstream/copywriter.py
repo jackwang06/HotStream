@@ -11,7 +11,21 @@ from hotstream.scenic_profile import scenic_profile_prompt_section
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+TEXT_DEFAULT_URL = "https://api.deepseek.com"
 DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+
+
+def _normalize_chat_endpoint(api_url: str | None) -> str:
+    """Resolve an OpenAI-compatible chat/completions endpoint from a base URL.
+
+    Rule (must match the Next.js contract): if the URL already contains
+    '/chat/completions' use it as-is; otherwise strip trailing slashes and
+    append '/chat/completions'. Empty/None falls back to the text default URL.
+    """
+    base = (api_url or "").strip() or TEXT_DEFAULT_URL
+    if "/chat/completions" in base:
+        return base
+    return base.rstrip("/") + "/chat/completions"
 
 DEFAULT_GLOBAL_PROMPT = (
     "你是一名资深中文新媒体文案主笔，不是写作顾问。你的任务是直接输出一篇已经写好的推文正文，"
@@ -156,6 +170,7 @@ def generate_copy_with_deepseek(
     global_prompt: str | None = None,
     temporary_prompt: str | None = None,
     qwen_analysis: dict[str, Any] | None = None,
+    api_url: str | None = None,
 ) -> str:
     """Generate copy for a selected hot topic using DeepSeek chat completions."""
     load_project_env()
@@ -163,6 +178,7 @@ def generate_copy_with_deepseek(
     if not resolved_api_key:
         raise RuntimeError("DeepSeek API Key 未填写")
 
+    endpoint = _normalize_chat_endpoint(api_url)
     resolved_model = (model or os.getenv("DEEPSEEK_MODEL") or DEFAULT_DEEPSEEK_MODEL).strip()
     body = {
         "model": resolved_model,
@@ -178,7 +194,7 @@ def generate_copy_with_deepseek(
         "stream": False,
     }
     request = Request(
-        DEEPSEEK_API_URL,
+        endpoint,
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {resolved_api_key}",

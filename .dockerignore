@@ -1,0 +1,15 @@
+# Build context for the Python scraper image (repo root).
+web
+ui
+tests
+.git
+.venv
+.worktrees
+__pycache__
+*.pyc
+.env
+*.md
+uv.lock
+.python-version
+vercel.json
+api

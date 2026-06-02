@@ -7,7 +7,25 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 QWEN_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-DEFAULT_QWEN_MODEL = "qwen2.5-vl-7b-instruct"
+VIDEO_DEFAULT_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# qwen-vl-max / qwen-vl-plus are the broadly-available commercial Qwen-VL models on
+# Aliyun Model Studio (DashScope). The open-source qwen2.5-vl-* models require explicit
+# per-account activation and return HTTP 403 access_denied otherwise — so default to the
+# commercial model that works out of the box. Override per request via the `model` field.
+DEFAULT_QWEN_MODEL = "qwen-vl-max"
+
+
+def _normalize_chat_endpoint(api_url: str | None) -> str:
+    """Resolve an OpenAI-compatible chat/completions endpoint from a base URL.
+
+    Rule (must match the Next.js contract): if the URL already contains
+    '/chat/completions' use it as-is; otherwise strip trailing slashes and
+    append '/chat/completions'. Empty/None falls back to the video default URL.
+    """
+    base = (api_url or "").strip() or VIDEO_DEFAULT_URL
+    if "/chat/completions" in base:
+        return base
+    return base.rstrip("/") + "/chat/completions"
 
 
 def _normalize_image_url(url: Any) -> str:
@@ -129,10 +147,12 @@ def analyze_video_with_qwen(
     api_key: str | None = None,
     model: str | None = None,
     timeout: int = 60,
+    api_url: str | None = None,
 ) -> dict[str, Any]:
     resolved_api_key = (api_key or "").strip()
     if not resolved_api_key:
         raise RuntimeError("Qwen API Key 未填写")
+    endpoint = _normalize_chat_endpoint(api_url)
     resolved_model = (model or DEFAULT_QWEN_MODEL).strip()
     body = {
         "model": resolved_model,
@@ -142,7 +162,7 @@ def analyze_video_with_qwen(
         "stream": False,
     }
     request = Request(
-        QWEN_API_URL,
+        endpoint,
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {resolved_api_key}",

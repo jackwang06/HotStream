@@ -100,6 +100,8 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
     topic = payload.get("topic") or {}
     brief = str(payload.get("brief") or "")
     api_key = str(payload.get("api_key") or "").strip()
+    api_url = str(payload.get("api_url") or "").strip() or None
+    model = str(payload.get("model") or "").strip() or None
     global_prompt = str(payload.get("global_prompt") or "").strip() or None
     temporary_prompt = str(payload.get("temporary_prompt") or "").strip() or None
     qwen_analysis = payload.get("qwen_analysis") if isinstance(payload.get("qwen_analysis"), dict) else None
@@ -112,6 +114,10 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
 
     try:
         kwargs: dict[str, Any] = {"topic": topic, "brief": brief, "api_key": api_key, "qwen_analysis": qwen_analysis}
+        if api_url is not None:
+            kwargs["api_url"] = api_url
+        if model is not None:
+            kwargs["model"] = model
         if global_prompt is not None:
             kwargs["global_prompt"] = global_prompt
         if temporary_prompt is not None:
@@ -188,12 +194,13 @@ def build_video_analysis_response(raw_body: bytes) -> tuple[int, dict[str, str],
     topic = payload.get("topic") or {}
     api_key = str(payload.get("api_key") or "").strip()
     model = str(payload.get("model") or "").strip() or None
+    api_url = str(payload.get("api_url") or "").strip() or None
     if not api_key:
         return 400, headers, _json_bytes({"success": False, "error": "请先填写 Qwen API Key"})
     if not str(topic.get("title") or "").strip():
         return 400, headers, _json_bytes({"success": False, "error": "缺少待分析的视频标题"})
     try:
-        result = analyze_video_with_qwen(topic=topic, api_key=api_key, model=model)
+        result = analyze_video_with_qwen(topic=topic, api_key=api_key, model=model, api_url=api_url)
         body = _json_bytes({
             "success": True,
             "analysis": result.get("analysis") or {},

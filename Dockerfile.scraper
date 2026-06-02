@@ -1,0 +1,19 @@
+# HotStream Python scraper/AI service. Stateless — does NOT touch the database
+# (Next.js owns all persistence). Pure stdlib except psycopg2 (lazily imported by
+# the now-superseded persistence routes; installed only as a safety net).
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir psycopg2-binary
+
+COPY hotstream/ ./hotstream/
+COPY scenic_profiles/ ./scenic_profiles/
+COPY main.py ./main.py
+
+ENV PORT=5173
+EXPOSE 5173
+
+# Bind 0.0.0.0 (not the main.py default of 127.0.0.1) so the web container can
+# reach it over the compose network. Keeps the Python source unmodified.
+CMD ["python", "-c", "import os; from hotstream.server import run_server; run_server(host='0.0.0.0', port=int(os.getenv('PORT', '5173')))"]

@@ -1,0 +1,39 @@
+services:
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile.scraper
+    environment:
+      PORT: "5173"
+    expose:
+      - "5173"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    depends_on:
+      - scraper
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      TZ: ${TZ:-Asia/Shanghai}
+      # PostgreSQL (substituted from the root .env)
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SCHEMA: ${DB_SCHEMA:-wangyafei}
+      # Admin seed
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Set COOKIE_SECURE=true only when serving over HTTPS
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Internal proxy target (compose network DNS name)
+      PYTHON_API_BASE: http://scraper:5173
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

@@ -51,4 +51,4 @@ def test_build_video_analysis_response_returns_analysis_images_and_timestamp():
     assert payload["analysis"]["summary"] == "草原视频分析"
     assert payload["images"][0]["source"] == "B站封面"
     assert "updated_at" in payload
-    analyze.assert_called_once_with(topic=request_payload["topic"], api_key="qwen-key", model=None)
+    analyze.assert_called_once_with(topic=request_payload["topic"], api_key="qwen-key", model=None, api_url=None)

@@ -69,7 +69,7 @@ def test_analyze_video_with_qwen_posts_dashscope_compatible_request():
 
     assert captured["url"] == "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     assert captured["headers"]["Authorization"] == "Bearer qwen-key"
-    assert captured["body"]["model"] == "qwen2.5-vl-7b-instruct"
+    assert captured["body"]["model"] == "qwen-vl-max"
     user_content = captured["body"]["messages"][1]["content"]
     assert {part["type"] for part in user_content} == {"image_url", "text"}
     assert "前山牧场四季牧歌" in user_content[-1]["text"]

@@ -1,0 +1,225 @@
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) 80px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+}
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0;
+}
+.title :global(.icon) {
+  width: 22px;
+  height: 22px;
+  color: var(--primary);
+}
+.topRight {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+.logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.logout:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+.link :global(.icon),
+.logout :global(.icon) {
+  width: 16px;
+  height: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+.cardTitle {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+
+.formRow {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.input,
+.select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  padding: 9px 11px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.input:focus,
+.select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-ring);
+}
+.input::placeholder {
+  color: var(--muted);
+}
+.input {
+  min-width: 150px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--primary);
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t-fast), transform var(--t-fast);
+}
+.btn:hover {
+  background: var(--primary-hover);
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btnGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  padding: 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.btnGhost:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+.btnGhost .icon {
+  width: 15px;
+  height: 15px;
+}
+.btnDanger {
+  color: var(--danger);
+  border-color: var(--danger-soft);
+}
+.btnDanger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+.msg {
+  min-height: 18px;
+  margin-top: var(--space-3);
+  font-size: 13px;
+}
+.msgError {
+  color: var(--danger);
+}
+.msgOk {
+  color: var(--ok);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.table th,
+.table td {
+  text-align: left;
+  padding: 13px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 13px;
+}
+.table tbody tr:hover {
+  background: var(--surface-3);
+}
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+}
+.badgeAdmin {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.badgeUser {
+  background: var(--surface-3);
+  color: var(--muted);
+}
+.badgeActive {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.badgeInactive {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.self {
+  color: var(--muted);
+  font-size: 12px;
+}

@@ -1,0 +1,122 @@
+:root {
+  /* ---------- 颜色：背景与表面（暖中性深底，非纯黑，按 Material 分层） ---------- */
+  --bg:           #0e120f;   /* 页面底，近黑偏绿暖 */
+  --surface:      #161b17;   /* 一级表面：卡片/面板（= 旧 --panel） */
+  --surface-2:    #1d231f;   /* 二级表面：输入框/内嵌块/表头（= 旧 --panel-2） */
+  --surface-3:    #252d27;   /* 三级表面：hover、选中底、拖拽占位 */
+
+  /* ---------- 边框（深色靠边框分层，非阴影） ---------- */
+  --border:        #2b332d;  /* 常规分隔 */
+  --border-strong: #3a443c;  /* 强边框：hover/聚焦容器 */
+
+  /* ---------- 文字（不用纯白） ---------- */
+  --text:        #eef2ee;    /* 主文本，柔白 */
+  --text-2:      #c2cbc4;    /* 次级文本 */
+  --muted:       #8b988f;    /* 弱文本/占位/元数据 */
+
+  /* ---------- 强调：牧场绿松（emerald/teal 去饱和，深底提一档更亮） ---------- */
+  --primary:        #2fb389;  /* 主强调：按钮底/链接/选中条 */
+  --primary-hover:  #38c79a;  /* hover 提亮 */
+  --primary-active: #259a75;  /* active 压暗 */
+  --primary-soft:   rgba(47, 179, 137, 0.14);  /* 选中/hover 软底 */
+  --primary-ring:   rgba(47, 179, 137, 0.45);  /* focus ring */
+  --secondary:      #2ba6a4;  /* 辅强调：湖泊青，tab/次级标识 */
+
+  /* ---------- 暖点缀：暮草金（四季/牧歌/选中点；务必配深字） ---------- */
+  --accent-warm:      #d9a23b;  /* 暮草金，徽章/季节标/Top 排名 */
+  --accent-warm-soft: rgba(217, 162, 59, 0.16);
+
+  /* ---------- 语义色（深底各提亮一档） ---------- */
+  --ok:        #3ec98a;  --ok-soft:      rgba(62, 201, 138, 0.16);
+  --warning:   #e0a93b;  --warning-soft: rgba(224, 169, 59, 0.16);
+  --danger:    #e76273;  --danger-soft:  rgba(231, 98, 115, 0.16);
+  --on-accent: #07140e;  /* 实底强调按钮上的深色文字（绿/金底配深字稳过 AA） */
+
+  /* ---------- 平台品牌色（仅作来源色点/底，不替代官方 logo） ---------- */
+  --brand-toutiao:  #f04142;  /* 今日头条 */
+  --brand-zhihu:    #0084ff;  /* 知乎 */
+  --brand-xhs:      #ff2442;  /* 小红书 */
+  --brand-bili:     #fb7299;  /* B站 */
+
+  /* ---------- 字体栈（方案 b：系统中文字体，不引网络字体） ---------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑",
+    "Source Han Sans SC", "Noto Sans SC", sans-serif;
+  --font-display: "PingFang SC", "Microsoft YaHei", "微软雅黑",
+    "Source Han Sans SC", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Cascadia Code", "Sarasa Mono SC", "等距更纱黑体 SC", monospace;
+
+  /* ---------- 间距刻度（4px 基 / 8px 主网格） ---------- */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+
+  /* ---------- 圆角（Geist 派生） ---------- */
+  --radius-sm:   4px;   /* tag / 来源 chip / badge */
+  --radius-md:   6px;   /* 按钮 / 输入 / logo */
+  --radius-lg:   8px;   /* 卡片 / 面板 / 列表项 */
+  --radius-xl:   12px;  /* 大卡 / 预览文档 / 弹层 */
+  --radius-full: 999px; /* 胶囊 / 状态点 / 头像 */
+
+  /* ---------- 阴影（深色克制；分层主要靠边框，静止卡片不投影） ---------- */
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-menu:  0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+  /* ---------- 过渡（微交互 ≤ 200ms） ---------- */
+  --t-fast:  120ms ease-out;
+  --t-base:  170ms ease-out;
+  --t-slow:  200ms ease-in-out;
+
+  /* ---------- 图标 ---------- */
+  --icon-stroke: 2;
+  --icon-color:  currentColor;
+
+  /* ---------- 兼容旧变量名（React 页与 legacy 内联 style 的旧引用） ---------- */
+  --panel:       var(--surface);
+  --panel-2:     var(--surface-2);
+  --accent:      var(--primary);        /* 旧 #4f8cff(蓝) → 统一为牧场绿松 */
+  --accent-2:    var(--primary-hover);
+  --accent-soft: var(--primary-soft);
+  --card:        var(--surface);
+  --line:        var(--border);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--primary-hover);
+}
+
+button {
+  font-family: inherit;
+}
+
+/* 内联 SVG 图标统一基线 */
+.icon {
+  display: inline-block;
+  vertical-align: -0.125em;
+  flex: none;
+}
+
+/* details 折叠箭头随开合翻转（配合 chevron-down 图标） */
+details[open] > summary .icon.chevron {
+  transform: rotate(180deg);
+  transition: transform var(--t-slow);
+}

@@ -1,0 +1,1104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HotStream 文案编辑器</title>
+  <style>
+    :root {
+      --bg: #0e120f;
+      --surface: #161b17;
+      --surface-2: #1d231f;
+      --surface-3: #252d27;
+      --border: #2b332d;
+      --border-strong: #3a443c;
+      --card: #161b17;
+      --line: #2b332d;
+      --text: #eef2ee;
+      --text-2: #c2cbc4;
+      --muted: #8b988f;
+      --primary: #2fb389;
+      --primary-hover: #38c79a;
+      --primary-active: #259a75;
+      --primary-soft: rgba(47, 179, 137, .14);
+      --primary-ring: rgba(47, 179, 137, .45);
+      --accent: #2fb389;
+      --accent-soft: rgba(47, 179, 137, .14);
+      --accent-warm: #d9a23b;
+      --accent-warm-soft: rgba(217, 162, 59, .16);
+      --on-accent: #07140e;
+      --ok: #3ec98a;
+      --danger: #e76273;
+      --danger-soft: rgba(231, 98, 115, .16);
+      --radius: 12px;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      --radius-xl: 12px;
+      --radius-full: 999px;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+      --shadow-menu: 0 4px 16px rgba(0, 0, 0, .45);
+      --t-fast: 120ms ease-out;
+      --t-base: 170ms ease-out;
+      --t-slow: 200ms ease-in-out;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", "Source Han Sans SC", "Noto Sans SC", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Cascadia Code", "Sarasa Mono SC", monospace;
+      --editor-work-area-height: calc(100vh - 382px);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font-sans);
+      color: var(--text);
+      background:
+        radial-gradient(1000px 500px at 80% -10%, var(--primary-soft), transparent 60%),
+        radial-gradient(900px 460px at 0% 110%, var(--accent-warm-soft), transparent 55%),
+        var(--bg);
+    }
+
+    button, textarea, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .icon { display: inline-block; vertical-align: -0.125em; flex: none; }
+
+    .page {
+      width: min(1560px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 30px 0 42px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-display);
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+    .brand .logo .icon { width: 22px; height: 22px; }
+
+    .logo {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-md);
+      display: grid;
+      place-items: center;
+      color: var(--on-accent);
+      background: var(--primary);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 11px 13px;
+      color: var(--text);
+      background: var(--surface-2);
+      font-weight: 600;
+      transition: border-color var(--t-fast), background var(--t-fast), transform var(--t-fast);
+    }
+    .btn .icon { width: 16px; height: 16px; }
+
+    .btn:hover { border-color: var(--border-strong); background: var(--surface-3); }
+    .btn:active { transform: scale(.98); }
+    .btn.primary { border-color: var(--primary); color: var(--on-accent); background: var(--primary); }
+    .btn.primary:hover { border-color: var(--primary-hover); background: var(--primary-hover); }
+    .btn.accent { border-color: transparent; color: var(--on-accent); background: linear-gradient(135deg, var(--primary-active), var(--primary)); }
+    .btn.accent:hover { filter: brightness(1.06); background: linear-gradient(135deg, var(--primary-active), var(--primary)); }
+    .btn.danger { color: var(--danger); background: transparent; border-color: var(--danger-soft); }
+    .btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+    .btn.small { padding: 7px 9px; border-radius: var(--radius-md); font-size: 12px; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(430px, .94fr) minmax(420px, 1fr) minmax(300px, .62fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .panel {
+      min-height: calc(100vh - 126px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-title { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; }
+    .panel-title .icon { width: 18px; height: 18px; color: var(--primary); }
+    .step {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-full);
+      display: grid;
+      place-items: center;
+      color: var(--on-accent);
+      background: var(--primary);
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .hint { color: var(--muted); font-size: 12px; }
+    .panel-body { padding: 16px 18px 18px; }
+
+    .field { display: grid; gap: 8px; margin-bottom: 12px; }
+    .field label { color: var(--text-2); font-size: 13px; font-weight: 700; }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      outline: none;
+      background: var(--surface-2);
+      color: var(--text);
+      transition: border-color var(--t-fast), box-shadow var(--t-fast);
+    }
+    input::placeholder, textarea::placeholder { color: var(--muted); }
+    input, select { padding: 12px 13px; }
+    textarea {
+      resize: vertical;
+      padding: 13px;
+      line-height: 1.76;
+      font-size: 15px;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-ring);
+    }
+
+    .editor-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+    .meta-line { color: var(--muted); font-size: 12px; line-height: 1.65; }
+
+    .block-editor {
+      display: grid;
+      gap: 12px;
+      min-height: var(--editor-work-area-height);
+      padding: 12px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface-2);
+    }
+
+    .content-block {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+    }
+
+    .content-block.dragging { opacity: .52; }
+    .content-block.drag-over { outline: 2px solid var(--primary); background: var(--primary-soft); }
+
+    .block-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+
+    .block-label {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 8px;
+      color: var(--text-2);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .drag-handle {
+      display: inline-grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border-radius: var(--radius-md);
+      color: var(--muted);
+      background: var(--surface-3);
+      cursor: grab;
+      user-select: none;
+    }
+    .drag-handle .icon { width: 16px; height: 16px; }
+
+    .block-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .block-textarea {
+      min-height: 118px;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none !important;
+      background: var(--surface);
+    }
+
+    .image-block-body { padding: 12px; }
+    .image-block-body img {
+      display: block;
+      width: 100%;
+      max-height: 360px;
+      object-fit: contain;
+      border-radius: var(--radius-md);
+      background: var(--surface-3);
+    }
+    .image-caption { margin-top: 8px; color: var(--muted); font-size: 12px; }
+
+    /* 预览外框：深色（与编辑器一致）；内部成品文档刻意保持白底（所见即所得，对应导出长图） */
+    .preview-wrap {
+      min-height: var(--editor-work-area-height);
+      overflow: auto;
+      padding: 18px;
+      background: var(--surface-2);
+    }
+    .preview-doc {
+      width: min(100%, 580px);
+      margin: 0 auto;
+      padding: 34px 34px 42px;
+      border-radius: var(--radius-xl);
+      background: #ffffff;
+      color: #1c1917;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+    }
+    .preview-doc h1 { margin: 0 0 18px; line-height: 1.25; letter-spacing: 0; font-size: 30px; color: #1c1917; }
+    .preview-doc .source { margin-bottom: 22px; color: #78716c; font-size: 13px; }
+    .preview-doc p { margin: 0 0 15px; line-height: 1.86; font-size: 16px; color: #1c1917; }
+    .preview-doc img { display: block; width: 100%; max-height: 540px; object-fit: contain; margin: 18px 0; border-radius: var(--radius-lg); background: #f3f4f6; }
+    .preview-empty { color: #78716c; text-align: center; padding: 60px 0; }
+
+    .material-actions { display: grid; gap: 10px; }
+    .upload-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      text-align: center;
+      font-weight: 700;
+      cursor: pointer;
+      transition: border-color var(--t-fast), background var(--t-fast);
+    }
+    .upload-label:hover { border-color: var(--primary); }
+    .upload-label .icon { width: 16px; height: 16px; }
+    .upload-label input { display: none; }
+    .material-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
+    .material-card {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-2);
+    }
+    .material-card[draggable="true"] { cursor: grab; }
+    .material-card img { display: block; width: 100%; aspect-ratio: 1.25; object-fit: cover; background: var(--surface-3); }
+    .material-info { padding: 8px; }
+    .material-title { overflow: hidden; margin-bottom: 8px; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .material-card button { width: 100%; border-radius: var(--radius-md); padding: 8px 9px; font-size: 12px; }
+    .empty { padding: 22px; border: 1px dashed var(--border); border-radius: var(--radius-lg); color: var(--muted); text-align: center; background: var(--surface-2); }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      transform: translate(-50%, 16px);
+      opacity: 0;
+      pointer-events: none;
+      padding: 11px 18px;
+      border-radius: var(--radius-full);
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      box-shadow: var(--shadow-menu);
+      transition: opacity var(--t-base), transform var(--t-base);
+      font-size: 14px;
+      z-index: 20;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 1180px) {
+      .workspace { grid-template-columns: 1fr; }
+      .panel { min-height: auto; }
+      .block-editor { min-height: 360px; }
+      .preview-wrap { min-height: 360px; }
+      .material-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 620px) {
+      .page { width: min(100% - 24px, 1560px); padding-top: 20px; }
+      header { align-items: flex-start; flex-direction: column; }
+      .toolbar { justify-content: flex-start; }
+      .editor-tools, .material-grid { grid-template-columns: 1fr; }
+      .preview-doc { padding: 24px 22px 32px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div class="brand"><div class="logo"><svg class="icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg></div><span>HotStream 文案编辑器</span></div>
+      <div class="toolbar">
+        <button class="btn" id="backBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>返回生成页</button>
+        <button class="btn" id="loadDraftBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>载入草稿</button>
+        <button class="btn" id="saveDraftBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>保存草稿</button>
+        <button class="btn accent" id="exportImageBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>导出长图</button>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="step">1</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>编辑文案</div>
+          <span class="hint" id="wordCount">0 字</span>
+        </div>
+        <div class="panel-body">
+          <div class="field">
+            <label for="editorTitle">标题</label>
+            <input id="editorTitle" placeholder="给这篇文案起一个标题" />
+          </div>
+          <div class="editor-tools">
+            <button class="btn" id="addTextBlockBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>添加文字段落</button>
+            <button class="btn danger" id="clearDraftBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>清空编辑页</button>
+          </div>
+          <textarea id="editorText" hidden aria-hidden="true"></textarea>
+          <div class="field">
+            <label for="blockEditor">正文块</label>
+            <div class="block-editor" id="blockEditor" aria-label="可拖拽排序的正文块"></div>
+          </div>
+          <div class="meta-line" id="draftMeta">草稿会保存在本机浏览器 localStorage；下次从主页点“继续编辑草稿”或直接打开编辑页会自动载入。</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="step">2</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>发布预览</div>
+          <select id="platformPreset" aria-label="平台预设">
+            <option value="xhs">小红书长图 · 1080 宽</option>
+            <option value="wechat">公众号头图感 · 900 宽</option>
+            <option value="simple">简洁通用 · 800 宽</option>
+          </select>
+        </div>
+        <div class="preview-wrap">
+          <article class="preview-doc" id="previewDoc"></article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="step">3</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>素材区</div>
+          <span class="hint">生成图 + 手动导入</span>
+        </div>
+        <div class="panel-body">
+          <div class="material-actions">
+            <label class="upload-label">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+              导入本地图片到素材区
+              <input id="assetUpload" type="file" accept="image/*" multiple />
+            </label>
+            <div class="meta-line">点击“插入正文”或把素材拖到左侧正文块区域，图片会以可视化卡片进入正文并参与长图导出。</div>
+          </div>
+          <div class="material-grid" id="materialGrid"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div class="toast" id="toast">已完成</div>
+
+  <script>
+    const IMPORT_KEY = 'hotstream.editorDraft';
+    const LIVE_KEY = 'hotstream.editorLiveDraft';
+    const titleInput = document.getElementById('editorTitle');
+    const textInput = document.getElementById('editorText');
+    const blockEditor = document.getElementById('blockEditor');
+    const materialGrid = document.getElementById('materialGrid');
+    const previewDoc = document.getElementById('previewDoc');
+    const wordCount = document.getElementById('wordCount');
+    const toast = document.getElementById('toast');
+    const draftMeta = document.getElementById('draftMeta');
+    let blocks = [];
+    let materials = [];
+    let sourceTopic = null;
+    let currentDraftId = null;
+
+    const presets = {
+      xhs: { width: 1080, padding: 72, title: 52, body: 34, line: 1.78, accent: '#2fb389' },
+      wechat: { width: 900, padding: 64, title: 44, body: 29, line: 1.82, accent: '#259a75' },
+      simple: { width: 800, padding: 56, title: 38, body: 27, line: 1.76, accent: '#1c1917' }
+    };
+
+    function showToast(text) {
+      toast.textContent = text;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 1900);
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[char]));
+    }
+
+    function makeId(prefix) {
+      return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function proxyImageUrl(url) {
+      if (!url || url.startsWith('data:') || url.startsWith('/api/proxy-image')) return url;
+      return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+    }
+
+    function normalizeImage(image, index = 0) {
+      const raw = image?.originalUrl || image?.url || image?.thumbnail || image?.displayUrl || '';
+      const title = image?.title || `素材 ${index + 1}`;
+      return {
+        id: image?.id || makeId(`asset-${index}`),
+        title,
+        originalUrl: raw,
+        displayUrl: image?.displayUrl || proxyImageUrl(raw),
+        source: image?.source || '生成图片'
+      };
+    }
+
+    function ensureMaterialForImage(url, title = '正文图片') {
+      const normalizedUrl = proxyImageUrl(url);
+      let asset = materials.find(item => item.displayUrl === normalizedUrl || item.originalUrl === url);
+      if (!asset) {
+        asset = normalizeImage({ url, title, source: '正文图片' }, materials.length);
+        materials.unshift(asset);
+      }
+      return asset;
+    }
+
+    function normalizeBlock(block, index = 0) {
+      if (block?.type === 'image') {
+        const url = block.url || block.displayUrl || block.originalUrl || '';
+        const asset = block.assetId ? materials.find(item => item.id === block.assetId) : ensureMaterialForImage(url, block.title || block.alt || `图片 ${index + 1}`);
+        return {
+          id: block.id || makeId('image'),
+          type: 'image',
+          title: block.title || block.alt || asset?.title || `图片 ${index + 1}`,
+          url: asset?.displayUrl || proxyImageUrl(url),
+          assetId: asset?.id || null
+        };
+      }
+      return {
+        id: block?.id || makeId('text'),
+        type: 'text',
+        text: block?.text || ''
+      };
+    }
+
+    function splitTextToBlocks(text) {
+      return String(text || '')
+        .split(/\n{2,}/)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(text => ({ id: makeId('text'), type: 'text', text }));
+    }
+
+    function parseLegacyContent(text) {
+      const parsed = [];
+      String(text || '').split(/\n{2,}/).forEach((part, index) => {
+        const trimmed = part.trim();
+        if (!trimmed) return;
+        const img = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+        if (img) {
+          const asset = ensureMaterialForImage(img[2], img[1] || `图片 ${index + 1}`);
+          parsed.push({ id: makeId('image'), type: 'image', title: asset.title, url: asset.displayUrl, assetId: asset.id });
+        } else {
+          parsed.push({ id: makeId('text'), type: 'text', text: trimmed });
+        }
+      });
+      return parsed;
+    }
+
+    function applyDraft(draft, metaText, { autoSave = true } = {}) {
+      const safeDraft = draft || { title: '', content: '', images: [], blocks: [], topic: null };
+      titleInput.value = safeDraft.title || safeDraft.topic?.title || '';
+      sourceTopic = safeDraft.topic || null;
+      materials = (safeDraft.images || []).filter(Boolean).map(normalizeImage);
+      if (Array.isArray(safeDraft.blocks) && safeDraft.blocks.length) {
+        blocks = safeDraft.blocks.map(normalizeBlock);
+      } else if (safeDraft.content) {
+        blocks = parseLegacyContent(safeDraft.content);
+      } else {
+        blocks = [];
+      }
+      draftMeta.textContent = metaText || '草稿会保存在本机浏览器 localStorage；下次从主页点“继续编辑草稿”或直接打开编辑页会自动载入。';
+      renderAll({ autoSave });
+    }
+
+    function loadInitialDraft() {
+      const imported = localStorage.getItem(IMPORT_KEY);
+      const live = localStorage.getItem(LIVE_KEY);
+      let draft = null;
+      let meta = '';
+      if (imported) {
+        try { draft = JSON.parse(imported); } catch { draft = null; }
+        localStorage.removeItem(IMPORT_KEY);
+        currentDraftId = draft && draft.id ? draft.id : null;
+        meta = draft?.updated_at ? `已导入刚生成的内容 · ${new Date(draft.updated_at).toLocaleString('zh-CN')}` : '已导入刚生成的内容。';
+      }
+      if (!draft && live) {
+        try { draft = JSON.parse(live); } catch { draft = null; }
+        meta = draft?.updated_at ? `已自动载入本地草稿 · ${new Date(draft.updated_at).toLocaleString('zh-CN')}` : '已自动载入本地草稿。';
+      }
+      applyDraft(draft, meta, { autoSave: Boolean(draft) });
+    }
+
+    function loadSavedDraft() {
+      const live = localStorage.getItem(LIVE_KEY);
+      if (!live) return showToast('暂无可载入的本地草稿');
+      let draft = null;
+      try { draft = JSON.parse(live); } catch { draft = null; }
+      if (!draft) return showToast('本地草稿读取失败');
+      applyDraft(draft, `已载入本地草稿 · ${new Date(draft.updated_at || Date.now()).toLocaleString('zh-CN')}`);
+      showToast('已载入本地草稿');
+    }
+
+    function serializeBlocks() {
+      return blocks
+        .map(block => {
+          if (block.type === 'image') return `![${block.title || '图片素材'}](${block.url})`;
+          return (block.text || '').trim();
+        })
+        .filter(Boolean)
+        .join('\n\n');
+    }
+
+    function currentDraft() {
+      return {
+        title: titleInput.value.trim(),
+        content: serializeBlocks(),
+        blocks,
+        topic: sourceTopic,
+        images: materials,
+        updated_at: new Date().toISOString()
+      };
+    }
+
+    function saveDraft({ silent = false } = {}) {
+      localStorage.setItem(LIVE_KEY, JSON.stringify(currentDraft()));
+      if (!silent) showToast('草稿已保存；下次从主页点“继续编辑草稿”可载入');
+    }
+
+    async function saveDraftToServer() {
+      const name = window.prompt('给这份草稿起个名字', titleInput.value.trim() || '未命名草稿');
+      if (name === null) return;
+      const title = name.trim() || '未命名草稿';
+      const url = currentDraftId ? `/api/drafts/${currentDraftId}` : '/api/drafts';
+      const method = currentDraftId ? 'PUT' : 'POST';
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, content_blocks: blocks, images: materials })
+        });
+        const data = await res.json();
+        if (!res.ok || !data || !data.success) throw new Error((data && data.error) || '保存失败');
+        if (data.draft && data.draft.id) currentDraftId = data.draft.id;
+        titleInput.value = title;
+        updateDerived();
+        showToast('草稿已保存到「草稿管理」');
+      } catch (err) {
+        showToast('保存失败：' + (err && err.message ? err.message : '请稍后再试'));
+      }
+    }
+
+    function visibleBlocks() {
+      return blocks.filter(block => block.type === 'image' || (block.text || '').trim());
+    }
+
+    function syncHiddenText() {
+      textInput.value = serializeBlocks();
+    }
+
+    function renderPreview() {
+      const title = titleInput.value.trim();
+      const bodyBlocks = visibleBlocks();
+      if (!title && !bodyBlocks.length) {
+        previewDoc.innerHTML = '<div class="preview-empty">生成的文案会自动导入；也可以从左侧添加文字段落和图片块。</div>';
+        return;
+      }
+      previewDoc.innerHTML = `
+        ${title ? `<h1>${escapeHtml(title)}</h1>` : ''}
+        ${sourceTopic ? `<div class="source">来源：${escapeHtml(sourceTopic.source || '')}${sourceTopic.hot_value ? ` · 热度 ${Number(sourceTopic.hot_value).toLocaleString('zh-CN')}` : ''}</div>` : ''}
+        ${bodyBlocks.map(block => block.type === 'image'
+          ? `<img src="${escapeHtml(block.url)}" alt="${escapeHtml(block.title || '图片素材')}" referrerpolicy="no-referrer" />`
+          : String(block.text || '').split('\n').filter(Boolean).map(line => `<p>${escapeHtml(line)}</p>`).join('')
+        ).join('')}
+      `;
+    }
+
+    function renderBlockEditor() {
+      if (!blocks.length) {
+        blockEditor.innerHTML = '<div class="empty">暂无正文块。点击“添加文字段落”，或从素材区插入图片。</div>';
+        return;
+      }
+      blockEditor.innerHTML = blocks.map((block, index) => {
+        const controls = `
+          <div class="block-controls">
+            <button class="btn small" data-action="up" data-block-id="${escapeHtml(block.id)}">上移</button>
+            <button class="btn small" data-action="down" data-block-id="${escapeHtml(block.id)}">下移</button>
+            <button class="btn small" data-action="add-after" data-block-id="${escapeHtml(block.id)}">后加文字</button>
+            <button class="btn small danger" data-action="delete" data-block-id="${escapeHtml(block.id)}">删除</button>
+          </div>
+        `;
+        if (block.type === 'image') {
+          return `
+            <article class="content-block" draggable="true" data-block-id="${escapeHtml(block.id)}" data-block-type="image">
+              <div class="block-head">
+                <div class="block-label"><span class="drag-handle" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><circle cx="9" cy="12" r="1.4"/><circle cx="9" cy="5" r="1.4"/><circle cx="9" cy="19" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="15" cy="5" r="1.4"/><circle cx="15" cy="19" r="1.4"/></svg></span><span>图片块 ${index + 1}</span></div>
+                ${controls}
+              </div>
+              <div class="image-block-body">
+                <img src="${escapeHtml(block.url)}" alt="${escapeHtml(block.title || '图片素材')}" referrerpolicy="no-referrer" />
+                <div class="image-caption">${escapeHtml(block.title || '图片素材')} · 可拖拽调整位置</div>
+              </div>
+            </article>
+          `;
+        }
+        return `
+          <article class="content-block" draggable="true" data-block-id="${escapeHtml(block.id)}" data-block-type="text">
+            <div class="block-head">
+              <div class="block-label"><span class="drag-handle" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><circle cx="9" cy="12" r="1.4"/><circle cx="9" cy="5" r="1.4"/><circle cx="9" cy="19" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="15" cy="5" r="1.4"/><circle cx="15" cy="19" r="1.4"/></svg></span><span>文字段落 ${index + 1}</span></div>
+              ${controls}
+            </div>
+            <textarea class="block-textarea" data-text-block-id="${escapeHtml(block.id)}" placeholder="输入这一段正文">${escapeHtml(block.text || '')}</textarea>
+          </article>
+        `;
+      }).join('');
+      wireBlockEditorEvents();
+    }
+
+    function renderMaterials() {
+      if (!materials.length) {
+        materialGrid.innerHTML = '<div class="empty">暂无素材。生成图片会自动出现在这里，也可以导入本地图片。</div>';
+        return;
+      }
+      materialGrid.innerHTML = materials.map(asset => `
+        <div class="material-card" draggable="true" data-asset-id="${escapeHtml(asset.id)}">
+          <img src="${escapeHtml(asset.displayUrl)}" alt="${escapeHtml(asset.title)}" referrerpolicy="no-referrer" />
+          <div class="material-info">
+            <div class="material-title">${escapeHtml(asset.title)} · ${escapeHtml(asset.source)}</div>
+            <button class="btn" data-insert="${escapeHtml(asset.id)}">插入正文</button>
+          </div>
+        </div>
+      `).join('');
+      materialGrid.querySelectorAll('[data-insert]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const asset = materials.find(item => item.id === btn.dataset.insert);
+          if (asset) insertImageBlock(asset);
+        });
+      });
+      materialGrid.querySelectorAll('[data-asset-id]').forEach(card => {
+        card.addEventListener('dragstart', event => {
+          event.dataTransfer.setData('application/x-hotstream-asset', card.dataset.assetId);
+          event.dataTransfer.effectAllowed = 'copy';
+        });
+      });
+    }
+
+    function updateDerived({ autoSave = true } = {}) {
+      syncHiddenText();
+      const count = blocks
+        .filter(block => block.type === 'text')
+        .map(block => block.text || '')
+        .join('')
+        .replace(/\s+/g, '').length;
+      wordCount.textContent = `${count.toLocaleString('zh-CN')} 字`;
+      renderPreview();
+      if (autoSave) saveDraft({ silent: true });
+    }
+
+    function renderAll(options = {}) {
+      renderBlockEditor();
+      renderMaterials();
+      updateDerived(options);
+    }
+
+    function addTextBlock(afterId = null, text = '') {
+      const block = { id: makeId('text'), type: 'text', text };
+      if (!afterId) {
+        blocks.push(block);
+      } else {
+        const index = blocks.findIndex(item => item.id === afterId);
+        blocks.splice(index >= 0 ? index + 1 : blocks.length, 0, block);
+      }
+      renderAll();
+      setTimeout(() => {
+        const textarea = blockEditor.querySelector(`[data-text-block-id="${CSS.escape(block.id)}"]`);
+        if (textarea) textarea.focus();
+      }, 0);
+    }
+
+    function insertImageBlock(asset, { beforeId = null } = {}) {
+      const block = {
+        id: makeId('image'),
+        type: 'image',
+        title: asset.title,
+        url: asset.displayUrl,
+        assetId: asset.id
+      };
+      if (beforeId) {
+        const index = blocks.findIndex(item => item.id === beforeId);
+        blocks.splice(index >= 0 ? index : blocks.length, 0, block);
+      } else {
+        blocks.push(block);
+      }
+      renderAll();
+      showToast('素材已作为图片块插入正文');
+    }
+
+    function moveBlock(id, direction) {
+      const index = blocks.findIndex(block => block.id === id);
+      if (index < 0) return;
+      const nextIndex = direction === 'up' ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= blocks.length) return;
+      const [block] = blocks.splice(index, 1);
+      blocks.splice(nextIndex, 0, block);
+      renderAll();
+    }
+
+    function moveBlockBefore(draggedId, targetId) {
+      if (!draggedId || !targetId || draggedId === targetId) return;
+      const from = blocks.findIndex(block => block.id === draggedId);
+      const to = blocks.findIndex(block => block.id === targetId);
+      if (from < 0 || to < 0) return;
+      const [block] = blocks.splice(from, 1);
+      const nextTo = blocks.findIndex(item => item.id === targetId);
+      blocks.splice(nextTo, 0, block);
+      renderAll();
+    }
+
+    function deleteBlock(id) {
+      blocks = blocks.filter(block => block.id !== id);
+      renderAll();
+      showToast('已删除正文块');
+    }
+
+    function wireBlockEditorEvents() {
+      blockEditor.querySelectorAll('[data-text-block-id]').forEach(textarea => {
+        textarea.addEventListener('input', () => {
+          const block = blocks.find(item => item.id === textarea.dataset.textBlockId);
+          if (block) block.text = textarea.value;
+          updateDerived();
+        });
+      });
+      blockEditor.querySelectorAll('[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.blockId;
+          if (btn.dataset.action === 'up') moveBlock(id, 'up');
+          if (btn.dataset.action === 'down') moveBlock(id, 'down');
+          if (btn.dataset.action === 'add-after') addTextBlock(id);
+          if (btn.dataset.action === 'delete') deleteBlock(id);
+        });
+      });
+      blockEditor.querySelectorAll('.content-block').forEach(card => {
+        card.addEventListener('dragstart', event => {
+          event.dataTransfer.setData('application/x-hotstream-block', card.dataset.blockId);
+          event.dataTransfer.effectAllowed = 'move';
+          card.classList.add('dragging');
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        card.addEventListener('dragover', event => {
+          event.preventDefault();
+          card.classList.add('drag-over');
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+        card.addEventListener('drop', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          card.classList.remove('drag-over');
+          const assetId = event.dataTransfer.getData('application/x-hotstream-asset');
+          if (assetId) {
+            const asset = materials.find(item => item.id === assetId);
+            if (asset) insertImageBlock(asset, { beforeId: card.dataset.blockId });
+            return;
+          }
+          moveBlockBefore(event.dataTransfer.getData('application/x-hotstream-block'), card.dataset.blockId);
+        });
+      });
+    }
+
+    blockEditor.addEventListener('dragover', event => event.preventDefault());
+    blockEditor.addEventListener('drop', event => {
+      if (event.target.closest('.content-block')) return;
+      event.preventDefault();
+      const assetId = event.dataTransfer.getData('application/x-hotstream-asset');
+      if (assetId) {
+        const asset = materials.find(item => item.id === assetId);
+        if (asset) insertImageBlock(asset);
+        return;
+      }
+      const draggedId = event.dataTransfer.getData('application/x-hotstream-block');
+      const from = blocks.findIndex(block => block.id === draggedId);
+      if (from >= 0) {
+        const [block] = blocks.splice(from, 1);
+        blocks.push(block);
+        renderAll();
+      }
+    });
+
+    function addFiles(files) {
+      Array.from(files || []).forEach((file, index) => {
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          materials.unshift({
+            id: makeId(`upload-${index}`),
+            title: file.name.replace(/\.[^.]+$/, ''),
+            originalUrl: reader.result,
+            displayUrl: reader.result,
+            source: '本地导入'
+          });
+          renderAll();
+          showToast('图片已加入素材区');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function wrapText(ctx, text, maxWidth) {
+      const lines = [];
+      String(text).split('\n').forEach(paragraph => {
+        let line = '';
+        Array.from(paragraph).forEach(char => {
+          const test = line + char;
+          if (ctx.measureText(test).width > maxWidth && line) {
+            lines.push(line);
+            line = char;
+          } else {
+            line = test;
+          }
+        });
+        if (line) lines.push(line);
+      });
+      return lines;
+    }
+
+    function loadCanvasImage(src) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        if (src && !src.startsWith('data:')) img.crossOrigin = 'anonymous';
+        img.src = src;
+      });
+    }
+
+    async function measureLayout(ctx, preset, exportBlocks, title) {
+      const maxWidth = preset.width - preset.padding * 2;
+      let height = preset.padding;
+      ctx.font = `800 ${preset.title}px sans-serif`;
+      if (title) height += wrapText(ctx, title, maxWidth).length * preset.title * 1.25 + 26;
+      if (sourceTopic) height += 34;
+      ctx.font = `400 ${preset.body}px sans-serif`;
+      for (const block of exportBlocks) {
+        if (block.type === 'image') {
+          const img = await loadCanvasImage(block.url);
+          const imageHeight = img ? Math.min(img.naturalHeight * maxWidth / img.naturalWidth, 640) : 120;
+          block._img = img;
+          block._height = imageHeight;
+          height += imageHeight + 30;
+        } else {
+          const lines = wrapText(ctx, block.text, maxWidth);
+          block._lines = lines;
+          height += lines.length * preset.body * preset.line + 24;
+        }
+      }
+      return Math.ceil(height + preset.padding + 54);
+    }
+
+    function roundedRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    async function exportLongImage() {
+      const title = titleInput.value.trim() || 'HotStream 文案';
+      const exportBlocks = visibleBlocks().map(block => ({ ...block }));
+      if (!exportBlocks.length) return showToast('没有可导出的正文');
+      const preset = presets[document.getElementById('platformPreset').value] || presets.xhs;
+      const scale = Math.min(2, window.devicePixelRatio || 1.5);
+      const canvas = document.createElement('canvas');
+      const measureCanvas = document.createElement('canvas');
+      const measureCtx = measureCanvas.getContext('2d');
+      const height = await measureLayout(measureCtx, preset, exportBlocks, title);
+      canvas.width = preset.width * scale;
+      canvas.height = height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale);
+
+      ctx.fillStyle = '#f3f7f6';
+      ctx.fillRect(0, 0, preset.width, height);
+      ctx.fillStyle = '#ffffff';
+      roundedRect(ctx, 26, 26, preset.width - 52, height - 52, 34);
+      ctx.fill();
+
+      const x = preset.padding;
+      const maxWidth = preset.width - preset.padding * 2;
+      let y = preset.padding;
+
+      ctx.fillStyle = '#111827';
+      ctx.font = `800 ${preset.title}px sans-serif`;
+      wrapText(ctx, title, maxWidth).forEach(line => {
+        ctx.fillText(line, x, y + preset.title);
+        y += preset.title * 1.25;
+      });
+      y += 24;
+
+      if (sourceTopic) {
+        ctx.fillStyle = preset.accent;
+        ctx.font = `600 ${Math.round(preset.body * .72)}px sans-serif`;
+        const meta = `HotStream · ${sourceTopic.source || '热点'}${sourceTopic.hot_value ? ` · 热度 ${Number(sourceTopic.hot_value).toLocaleString('zh-CN')}` : ''}`;
+        ctx.fillText(meta, x, y);
+        y += 34;
+      }
+
+      for (const block of exportBlocks) {
+        if (block.type === 'image') {
+          if (block._img) {
+            const imgW = maxWidth;
+            const imgH = block._height;
+            roundedRect(ctx, x, y, imgW, imgH, 18);
+            ctx.save();
+            ctx.clip();
+            ctx.drawImage(block._img, x, y, imgW, imgH);
+            ctx.restore();
+            y += imgH + 30;
+          } else {
+            ctx.fillStyle = '#f3f4f6';
+            roundedRect(ctx, x, y, maxWidth, 110, 18);
+            ctx.fill();
+            ctx.fillStyle = '#78716c';
+            ctx.font = `500 ${preset.body * .8}px sans-serif`;
+            ctx.fillText('图片加载失败，已跳过原图', x + 26, y + 65);
+            y += 140;
+          }
+        } else {
+          ctx.fillStyle = '#27313f';
+          ctx.font = `400 ${preset.body}px sans-serif`;
+          (block._lines || wrapText(ctx, block.text, maxWidth)).forEach(line => {
+            ctx.fillText(line, x, y + preset.body);
+            y += preset.body * preset.line;
+          });
+          y += 24;
+        }
+      }
+
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = `500 ${Math.round(preset.body * .64)}px sans-serif`;
+      ctx.fillText('由 HotStream 生成与编辑', x, height - preset.padding + 8);
+
+      const link = document.createElement('a');
+      const safeTitle = title.replace(/[^0-9A-Za-z\u4e00-\u9fff_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'hotstream-long-image';
+      link.download = `${safeTitle}.png`;
+      link.href = canvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      showToast('长图已导出');
+    }
+
+    titleInput.addEventListener('input', () => updateDerived());
+    document.getElementById('platformPreset').addEventListener('change', renderPreview);
+    document.getElementById('assetUpload').addEventListener('change', (event) => addFiles(event.target.files));
+    document.getElementById('addTextBlockBtn').addEventListener('click', () => addTextBlock());
+    document.getElementById('loadDraftBtn').addEventListener('click', () => { window.location.href = '/drafts'; });
+    document.getElementById('saveDraftBtn').addEventListener('click', () => saveDraftToServer());
+    document.getElementById('exportImageBtn').addEventListener('click', exportLongImage);
+    document.getElementById('backBtn').addEventListener('click', () => { window.location.href = '/app'; });
+    document.getElementById('clearDraftBtn').addEventListener('click', () => {
+      if (!confirm('确定清空当前编辑页草稿吗？')) return;
+      titleInput.value = '';
+      blocks = [];
+      materials = [];
+      sourceTopic = null;
+      localStorage.removeItem(LIVE_KEY);
+      localStorage.removeItem(IMPORT_KEY);
+      renderAll({ autoSave: false });
+      showToast('已清空编辑页');
+    });
+
+    loadInitialDraft();
+
+    // ── Current-user bar (injected by the Next.js auth layer) ──
+    (async function userBar() {
+      try {
+        const r = await fetch('/api/auth/me', { cache: 'no-store' });
+        const d = await r.json();
+        if (!d || !d.success) return;
+        const name = d.user.displayName || d.user.username;
+        const userSvg = '<svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+        const usersSvg = '<svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+        const outSvg = '<svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>';
+        const draftSvg = '<svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>';
+        const bar = document.createElement('div');
+        bar.style.cssText = 'position:fixed;top:12px;right:16px;z-index:9999;display:flex;gap:10px;align-items:center;font-size:13px;color:var(--text-2);background:var(--surface);backdrop-filter:blur(6px);padding:6px 12px;border:1px solid var(--border-strong);border-radius:999px;box-shadow:var(--shadow-menu);';
+        const who = document.createElement('span');
+        who.style.cssText = 'display:inline-flex;align-items:center;gap:6px;';
+        who.innerHTML = userSvg + ' ' + escapeHtml(name);
+        bar.appendChild(who);
+        if (d.user.role === 'admin') {
+          const a = document.createElement('a');
+          a.href = '/admin/users';
+          a.innerHTML = usersSvg + ' 用户管理';
+          a.style.cssText = 'display:inline-flex;align-items:center;gap:5px;color:var(--primary);text-decoration:none;';
+          bar.appendChild(a);
+        }
+        const drafts = document.createElement('a');
+        drafts.href = '/drafts';
+        drafts.innerHTML = draftSvg + ' 草稿';
+        drafts.style.cssText = 'display:inline-flex;align-items:center;gap:5px;color:var(--accent-warm);text-decoration:none;';
+        bar.appendChild(drafts);
+        const gearSvg = '<svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>';
+        const profile = document.createElement('a');
+        profile.href = '/profile';
+        profile.innerHTML = gearSvg + ' 用户信息';
+        profile.style.cssText = 'display:inline-flex;align-items:center;gap:5px;color:var(--accent-warm);text-decoration:none;';
+        bar.appendChild(profile);
+        const out = document.createElement('button');
+        out.innerHTML = outSvg + ' 登出';
+        out.style.cssText = 'display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:13px;';
+        out.onclick = async () => { try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {} location.href = '/login'; };
+        bar.appendChild(out);
+        document.body.appendChild(bar);
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
+</body>
+</html>
