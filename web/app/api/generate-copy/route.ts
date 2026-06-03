@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   const settings = await getUserSettings(user.id);
   if (!settings.deepseek_api_key) {
     return NextResponse.json(
-      { success: false, error: "请在用户信息配置文案生成 API Key" },
+      { success: false, error: "请在设置配置文案生成 API Key" },
       { status: 400 },
     );
   }
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "文案生成 API Key 无效或未授权。请到「用户信息」检查并重新填写文案生成 API Key。",
+          error: "文案生成 API Key 无效或未授权。请到「设置」检查并重新填写文案生成 API Key。",
         },
         { status: 400 },
       );

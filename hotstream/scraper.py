@@ -5,7 +5,7 @@ import json
 import re
 import urllib.request
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 TOUTIAO_HOT_BOARD_URL = "https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc"
 ZHIHU_HOT_LIST_URL = "https://api.zhihu.com/topstory/hot-list?limit=50&reverse_order=0"
@@ -16,6 +16,7 @@ SOURCE_LABELS = {
     "zhihu": "知乎",
     "xiaohongshu": "小红书",
     "bilibili": "B站",
+    "douyin": "抖音",
 }
 
 BILIBILI_POPULAR_URL = "https://api.bilibili.com/x/web-interface/popular?ps=50&pn=1"
@@ -36,6 +37,12 @@ BILIBILI_CATEGORY_RIDS = {
     "movie": "23",
     "documentary": "177",
 }
+
+DOUYIN_HOTSEARCH_URL = "https://aweme.snssdk.com/aweme/v1/hot/search/list/?detail_list=1"
+DOUYIN_HOTSEARCH_FALLBACK_URL = (
+    "https://www.douyin.com/aweme/v1/web/hot/search/list/"
+    "?device_platform=webapp&aid=6383&detail_list=1"
+)
 
 REQUEST_HEADERS = {
     "User-Agent": (
@@ -386,6 +393,112 @@ def fetch_bilibili_hot_topics(
     return _limit(topics, limit)
 
 
+DOUYIN_LABEL_TEXT = {1: "新", 3: "热", 8: "沸", 5: "荐", 9: "首发"}
+
+
+def _douyin_label(raw_label: Any, hot_value: int) -> str:
+    """Map Douyin's hot-board label to display text.
+
+    The board's `label` field is a status code (int), not free text. Keep a
+    genuine non-numeric string if present; map known codes to 热/新/沸; else
+    fall back to a hot-value badge.
+    """
+    text = str(raw_label or "").strip()
+    if text and not text.lstrip("-").isdigit():
+        return text
+    code = _to_int(raw_label, default=0)
+    if code in DOUYIN_LABEL_TEXT:
+        return DOUYIN_LABEL_TEXT[code]
+    return f"{hot_value} 热度"
+
+
+def _douyin_topic_url(sentence_id: Any, word: str) -> str:
+    sid = str(sentence_id or "").strip()
+    if sid and sid != "0":
+        return f"https://www.douyin.com/hot/{sid}"
+    return f"https://www.douyin.com/search/{quote(word)}"
+
+
+def parse_douyin_hot_search(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize Douyin hot-search board JSON into B站-shaped topic rows.
+
+    Preserves the official hot-board ordering (word_list position) as rank.
+    """
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    rows = data.get("word_list") or []
+    topics: list[dict[str, Any]] = []
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        word = str(row.get("word") or "").strip()
+        if not word:
+            continue
+        hot_value = _to_int(row.get("hot_value"))
+        word_cover = row.get("word_cover") if isinstance(row.get("word_cover"), dict) else {}
+        url_list = word_cover.get("url_list") if isinstance(word_cover.get("url_list"), list) else []
+        cover = _normalize_image_url(url_list[0]) if url_list else ""
+        label = _douyin_label(row.get("label"), hot_value)
+        video_count = _to_int(row.get("video_count"))
+        discuss_video_count = _to_int(row.get("discuss_video_count"))
+        topics.append({
+            "rank": len(topics) + 1,
+            "title": word,
+            "url": _douyin_topic_url(row.get("sentence_id"), word),
+            "hot_value": hot_value,
+            "label": label,
+            "source": "抖音",
+            "type": "video",
+            "cover": cover,
+            "desc": "",
+            "metrics": {
+                "hot_value": hot_value,
+                "video_count": video_count,
+                "discuss_video_count": discuss_video_count,
+            },
+        })
+
+    return topics
+
+
+def fetch_douyin_hot_topics(
+    limit: int = 20,
+    timeout: int = 10,
+    keyword: str | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch the Douyin hot-search board as B站-shaped topics (primary + fallback).
+
+    Douyin exposes no sign-free search API, so a non-empty keyword filters the
+    board by case-insensitive substring match on the topic title (word).
+    """
+    referer = "https://www.douyin.com/"
+    payload: dict[str, Any] | None = None
+    errors: list[str] = []
+    for url in (DOUYIN_HOTSEARCH_URL, DOUYIN_HOTSEARCH_FALLBACK_URL):
+        try:
+            raw = _request(url, referer=referer, timeout=timeout)
+            candidate = json.loads(raw.decode("utf-8"))
+            data = candidate.get("data") if isinstance(candidate.get("data"), dict) else {}
+            if data.get("word_list"):
+                payload = candidate
+                break
+            errors.append(f"{url}: empty word_list")
+        except Exception as exc:  # noqa: BLE001 - try fallback before failing
+            errors.append(f"{url}: {exc}")
+            continue
+    if payload is None:
+        raise RuntimeError("抖音热搜接口请求失败：" + " | ".join(errors))
+
+    topics = parse_douyin_hot_search(payload)
+    keyword_text = str(keyword or "").strip()
+    if keyword_text:
+        needle = keyword_text.lower()
+        topics = [topic for topic in topics if needle in str(topic.get("title") or "").lower()]
+        for index, topic in enumerate(topics, start=1):
+            topic["rank"] = index
+    return _limit(topics, limit)
+
+
 def fetch_hot_topics(
     source: str = "toutiao",
     limit: int = 20,
@@ -403,4 +516,6 @@ def fetch_hot_topics(
         return fetch_xiaohongshu_hot_topics(limit=limit, timeout=timeout)
     if normalized in {"bilibili", "b站", "哔哩哔哩", "bili"}:
         return fetch_bilibili_hot_topics(limit=limit, timeout=timeout, keyword=keyword, category=category, sort=sort)
+    if normalized in {"douyin", "抖音", "dy"}:
+        return fetch_douyin_hot_topics(limit=limit, timeout=timeout, keyword=keyword)
     raise ValueError(f"不支持的数据源：{source}")

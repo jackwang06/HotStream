@@ -38,18 +38,20 @@ def _normalize_image_url(url: Any) -> str:
 def build_video_materials(topic: dict[str, Any]) -> list[dict[str, str]]:
     """Return best-effort video visual materials for the editor.
 
-    MVP uses the Bilibili cover because full video frame extraction needs signed
-    play URLs and ffmpeg. The shape matches the existing editor material schema.
+    MVP uses the cover image (Bilibili or Douyin) because full video frame
+    extraction needs signed play URLs and ffmpeg. The shape matches the
+    existing editor material schema.
     """
     cover = _normalize_image_url(topic.get("cover") or topic.get("pic") or topic.get("thumbnail"))
     if not cover:
         return []
     title = str(topic.get("title") or "视频").strip() or "视频"
+    src = str(topic.get("source") or "B站").strip() or "B站"
     return [{
         "url": cover,
         "thumbnail": cover,
-        "title": f"B站视频封面：{title}",
-        "source": "B站封面",
+        "title": f"{src}视频封面：{title}",
+        "source": f"{src}封面",
     }]
 
 
@@ -119,13 +121,14 @@ def _build_qwen_messages(topic: dict[str, Any]) -> list[dict[str, Any]]:
     desc = str(topic.get("desc") or topic.get("description") or topic.get("label") or "").strip()
     metrics = topic.get("metrics") or topic.get("stats") or {}
     cover = _normalize_image_url(topic.get("cover") or topic.get("pic") or topic.get("thumbnail"))
+    src = str(topic.get("source") or "B站").strip() or "B站"
     user_content: list[dict[str, Any]] = []
     if cover:
         user_content.append({"type": "image_url", "image_url": {"url": cover}})
     user_content.append({
         "type": "text",
         "text": (
-            "请分析这个 B站热门视频，并输出严格 JSON，字段必须包括："
+            f"请分析这个{src}热门视频，并输出严格 JSON，字段必须包括："
             "summary、scenes、visual_keywords、audience_emotion、usable_facts、risks。\n"
             "品牌目标：为「前山牧场四季牧歌民俗风情园」生成借势推广推文提供素材。\n"
             "只基于输入的封面/标题/简介/公开流量数据分析，不要编造视频里没有的事实；"

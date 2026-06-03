@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   const settings = await getUserSettings(user.id);
   if (!settings.qwen_api_key) {
     return NextResponse.json(
-      { success: false, error: "请在用户信息配置视频分析 API Key" },
+      { success: false, error: "请在设置配置视频分析 API Key" },
       { status: 400 },
     );
   }
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
         {
           success: false,
           error:
-            "视频分析 API Key 无效或未授权。请到「用户信息」填写视频分析 API Key —— 它与文案生成的 Key 不同，不能混用。",
+            "视频分析 API Key 无效或未授权。请到「设置」填写视频分析 API Key —— 它与文案生成的 Key 不同，不能混用。",
         },
         { status: 400 },
       );

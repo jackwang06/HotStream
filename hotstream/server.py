@@ -43,6 +43,9 @@ def _normalize_source(source: str) -> str:
         "b站": "bilibili",
         "哔哩哔哩": "bilibili",
         "bili": "bilibili",
+        "douyin": "douyin",
+        "抖音": "douyin",
+        "dy": "douyin",
     }
     return aliases.get(normalized, normalized)
 
@@ -63,7 +66,7 @@ def build_hot_topics_response(
     }
     try:
         fetch_kwargs: dict[str, Any] = {"limit": limit}
-        if source_key == "bilibili" or keyword or category or sort:
+        if source_key in {"bilibili", "douyin"} or keyword or category or sort:
             fetch_kwargs.update({"keyword": keyword, "category": category, "sort": sort})
         topics = fetch_hot_topics(source_key, **fetch_kwargs)
         body = _json_bytes({

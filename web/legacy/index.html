@@ -695,6 +695,7 @@
               <option value="xiaohongshu">小红书</option>
               <option value="zhihu">知乎</option>
               <option value="bilibili">B站视频</option>
+              <option value="douyin">抖音</option>
             </select>
             <input id="keyword" placeholder="可选关键词，例如：草原、避暑、团建" />
           </div>
@@ -726,12 +727,12 @@
         </div>
         <div class="card-body">
           <div class="prompt-editor">
-            <div class="settings-link-hint">API、代理灵魂与默认提示词请在<a href="/profile">「用户信息」</a>中配置。</div>
-            <div class="settings-link-hint">本次提示词初始等于你的「默认提示词」(在<a href="/profile">「用户信息」</a>里维护)；热点信息/景点画像/视频分析会在生成时自动附加，无需写进本框。可临时微调；想长期生效就写回默认提示词。</div>
+            <div class="settings-link-hint">API、代理灵魂与默认提示词请在<a href="/profile">「设置」</a>中配置。</div>
+            <div class="settings-link-hint">本次提示词初始等于你的「默认提示词」(在<a href="/profile">「设置」</a>里维护)；热点信息/景点画像/视频分析会在生成时自动附加，无需写进本框。可临时微调；想长期生效就写回默认提示词。</div>
             <div class="settings-link-hint">生成时会自动参考<a href="/knowledge">「知识库」</a>中已启用的条目；想有针对性就在本次提示词里点明(如'重点宣传下月15号的篝火晚会')。</div>
             <div class="video-analysis hidden" id="videoAnalysisPanel">
-              <button class="ghost-btn" id="analyzeVideoBtn" type="button">用 Qwen2.5-VL 分析所选 B站视频</button>
-              <div class="video-analysis-output" id="videoAnalysisOutput">选择 B站视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。</div>
+              <button class="ghost-btn" id="analyzeVideoBtn" type="button">用 Qwen2.5-VL 分析所选视频</button>
+              <div class="video-analysis-output" id="videoAnalysisOutput">选择 B站/抖音视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。</div>
             </div>
             <div class="prompt-field">
               <label for="temporaryPrompt">本次提示词</label>
@@ -797,7 +798,15 @@
       return sourceSelect.value === 'bilibili';
     }
 
-    function resetVideoAnalysis(text = '选择 B站视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。') {
+    function isDouyinMode() {
+      return sourceSelect.value === 'douyin';
+    }
+
+    function isVideoMode() {
+      return isBilibiliMode() || isDouyinMode();
+    }
+
+    function resetVideoAnalysis(text = '选择 B站/抖音视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。') {
       lastVideoAnalysis = null;
       lastVideoImages = [];
       lastAnalyzedVideoUrl = '';
@@ -806,9 +815,10 @@
 
     function updateSourceModeUI() {
       const isBili = isBilibiliMode();
+      const isVideo = isVideoMode();
       bilibiliTools.classList.toggle('hidden', !isBili);
-      videoAnalysisPanel.classList.toggle('hidden', !isBili);
-      if (!isBili) resetVideoAnalysis('切换到 B站视频后，可先分析视频内容。');
+      videoAnalysisPanel.classList.toggle('hidden', !isVideo);
+      if (!isVideo) resetVideoAnalysis('切换到 B站/抖音视频后，可先分析视频内容。');
     }
 
     function showToast(text) {
@@ -885,7 +895,8 @@
 
     function filteredTopics() {
       const keyword = keywordInput.value.trim().toLowerCase();
-      if (!keyword || isBilibiliMode()) return topics;
+      // 视频源(B站/抖音)的 keyword 已在服务端过滤，这里不再做客户端二次过滤。
+      if (!keyword || isVideoMode()) return topics;
       return topics.filter(topic => topic.title.toLowerCase().includes(keyword));
     }
 
@@ -930,7 +941,7 @@
         if (lastVideoAnalysis && lastAnalyzedVideoUrl && newKey === lastAnalyzedVideoUrl) {
           renderVideoAnalysis(lastVideoAnalysis);
         } else if (changed) {
-          resetVideoAnalysis(isBilibiliMode() ? '已选择 B站视频。请填写 Qwen API Key 后点击“分析所选 B站视频”。' : '切换到 B站视频后，可先分析视频内容。');
+          resetVideoAnalysis(isVideoMode() ? '已选择视频。请填写 Qwen API Key 后点击“分析所选视频”。' : '切换到 B站/抖音视频后，可先分析视频内容。');
         }
         // 本次提示词与具体热点无关、不随选热点变化；这里不再重载提示词。
         showToast('已选择热点');
@@ -975,6 +986,9 @@
           params.set('sort', 'traffic_desc');
           params.set('category', bilibiliCategory.value);
           if (keywordInput.value.trim()) params.set('keyword', keywordInput.value.trim());
+        } else if (isDouyinMode()) {
+          // 抖音无分类；keyword 作为对热榜 word 的子串过滤交给服务端处理。
+          if (keywordInput.value.trim()) params.set('keyword', keywordInput.value.trim());
         }
         const response = await fetch(`/api/hot-topics?${params.toString()}`, { cache: 'no-store' });
         const payload = await response.json();
@@ -1005,14 +1019,16 @@
       if (isBilibiliMode()) { selectedTopic = null; resetVideoAnalysis(); fetchHotTopics(); }
     });
     keywordInput.addEventListener('input', () => {
-      if (isBilibiliMode()) return;
+      // 视频源(B站/抖音)的 keyword 走服务端(B站搜索接口 / 抖音热榜子串过滤)，
+      // 由回车触发重新抓取；其余来源仍做客户端即时过滤。
+      if (isVideoMode()) return;
       renderTopics();
     });
     keywordInput.addEventListener('keydown', event => {
-      if (event.key === 'Enter' && isBilibiliMode()) fetchHotTopics();
+      if (event.key === 'Enter' && isVideoMode()) fetchHotTopics();
     });
     // ── Load saved settings from server ──
-    // API keys / URLs / models and the global prompt are managed on the 用户信息
+    // API keys / URLs / models and the global prompt are managed on the 设置
     // (/profile) page and injected server-side. Here we only learn whether each
     // API is configured, to gate the generate / analyze buttons.
     let deepseekConfigured = false;
@@ -1069,12 +1085,12 @@
     }
 
     analyzeVideoBtn.addEventListener('click', async () => {
-      if (!selectedTopic || selectedTopic.source !== 'B站') {
-        showToast('请先选择一个 B站视频');
+      if (!selectedTopic || !['B站', '抖音'].includes(selectedTopic.source)) {
+        showToast('请先选择一个视频');
         return;
       }
       if (!qwenConfigured) {
-        showToast('请先在「用户信息」配置视频分析 API');
+        showToast('请先在「设置」配置视频分析 API');
         return;
       }
       analyzeVideoBtn.disabled = true;
@@ -1099,7 +1115,7 @@
         showToast('视频分析失败');
       } finally {
         analyzeVideoBtn.disabled = false;
-        analyzeVideoBtn.textContent = '用 Qwen2.5-VL 分析所选 B站视频';
+        analyzeVideoBtn.textContent = '用 Qwen2.5-VL 分析所选视频';
       }
     });
 
@@ -1114,11 +1130,11 @@
         return;
       }
       if (!deepseekConfigured) {
-        showToast('请先在「用户信息」配置文案生成 API');
+        showToast('请先在「设置」配置文案生成 API');
         return;
       }
-      if (selectedTopic.source === 'B站' && (!lastVideoAnalysis || lastAnalyzedVideoUrl !== topicKey(selectedTopic))) {
-        showToast('请先用 Qwen 分析所选 B站视频');
+      if (['B站', '抖音'].includes(selectedTopic.source) && (!lastVideoAnalysis || lastAnalyzedVideoUrl !== topicKey(selectedTopic))) {
+        showToast('请先用 Qwen 分析所选视频');
         return;
       }
       const generateBtn = document.getElementById('generateBtn');
@@ -1324,7 +1340,7 @@
         const gearSvg = '<svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>';
         const profile = document.createElement('a');
         profile.href = '/profile';
-        profile.innerHTML = gearSvg + ' 用户信息';
+        profile.innerHTML = gearSvg + ' 设置';
         profile.style.cssText = 'display:inline-flex;align-items:center;gap:5px;color:var(--primary);text-decoration:none;';
         bar.appendChild(profile);
         const out = document.createElement('button');
