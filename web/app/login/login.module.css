@@ -3,20 +3,70 @@
   display: grid;
   place-items: center;
   padding: var(--space-6);
+  position: relative;
+  overflow: hidden;
+  /* Establish a stacking context so the negative z-index background layers
+     (::before image / ::after scrim) paint ABOVE the opaque body background
+     instead of escaping to the root context behind it. */
+  isolation: isolate;
+}
+
+/* Background image layer */
+.wrap::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background: url(/login-bg.jpg) center / cover no-repeat;
+  filter: blur(9px) saturate(1.05) brightness(0.95);
+  transform: scale(1.12);
+}
+
+/* Readability scrim — dark mode default */
+.wrap::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background:
-    radial-gradient(1200px 600px at 70% -10%, var(--primary-soft), transparent 60%),
-    radial-gradient(900px 500px at 0% 110%, var(--accent-warm-soft), transparent 55%),
-    var(--bg);
+    linear-gradient(
+      135deg,
+      rgba(10, 12, 20, 0.62) 0%,
+      rgba(15, 20, 40, 0.55) 50%,
+      rgba(10, 12, 20, 0.60) 100%
+    );
+}
+
+/* Readability scrim — light mode */
+:global([data-theme="light"]) .wrap::after {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(240, 245, 255, 0.55) 0%,
+      rgba(220, 235, 255, 0.48) 50%,
+      rgba(240, 245, 255, 0.52) 100%
+    );
 }
 
 .card {
   width: 100%;
   max-width: 384px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
+  /* Frosted glass — dark mode */
+  background: rgba(18, 22, 38, 0.62);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: var(--radius-xl);
   padding: var(--space-6) 28px;
   box-shadow: var(--shadow-modal);
+}
+
+/* Frosted glass — light mode */
+:global([data-theme="light"]) .card {
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.55);
 }
 
 .brandRow {

@@ -11,7 +11,12 @@ from typing import Any
 from urllib.error import URLError
 from urllib.parse import parse_qs, urlparse
 
-from hotstream.copywriter import DEFAULT_GLOBAL_PROMPT, build_default_temporary_prompt, generate_copy_with_deepseek
+from hotstream.copywriter import (
+    DEFAULT_GLOBAL_PROMPT,
+    DEFAULT_PROMPT_TEMPLATE,
+    build_default_temporary_prompt,
+    generate_copy_with_deepseek,
+)
 from hotstream.image_scraper import fetch_related_images
 from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics
 from hotstream.video_analyzer import analyze_video_with_qwen
@@ -104,6 +109,8 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
     model = str(payload.get("model") or "").strip() or None
     global_prompt = str(payload.get("global_prompt") or "").strip() or None
     temporary_prompt = str(payload.get("temporary_prompt") or "").strip() or None
+    default_prompt = str(payload.get("default_prompt") or "").strip() or None
+    knowledge_base = str(payload.get("knowledge_base") or "")
     qwen_analysis = payload.get("qwen_analysis") if isinstance(payload.get("qwen_analysis"), dict) else None
     source_images = payload.get("source_images") if isinstance(payload.get("source_images"), list) else []
     title = str(topic.get("title") or "").strip()
@@ -122,6 +129,10 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
             kwargs["global_prompt"] = global_prompt
         if temporary_prompt is not None:
             kwargs["temporary_prompt"] = temporary_prompt
+        if default_prompt is not None:
+            kwargs["default_prompt"] = default_prompt
+        if knowledge_base:
+            kwargs["knowledge_base"] = knowledge_base
         with ThreadPoolExecutor(max_workers=2) as executor:
             copy_future = executor.submit(generate_copy_with_deepseek, **kwargs)
             images_future = executor.submit(fetch_related_images, title, limit=30)
@@ -173,10 +184,34 @@ def build_prompts_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]
     topic = payload.get("topic") or {}
     brief = str(payload.get("brief") or "")
     qwen_analysis = payload.get("qwen_analysis") if isinstance(payload.get("qwen_analysis"), dict) else None
+    default_prompt = str(payload.get("default_prompt") or "").strip() or None
     body = _json_bytes({
         "success": True,
         "global_prompt": DEFAULT_GLOBAL_PROMPT,
-        "temporary_prompt": build_default_temporary_prompt(topic=topic, brief=brief, qwen_analysis=qwen_analysis),
+        "temporary_prompt": build_default_temporary_prompt(
+            topic=topic,
+            brief=brief,
+            qwen_analysis=qwen_analysis,
+            default_prompt=default_prompt,
+        ),
+    })
+    return 200, headers, body
+
+
+def build_prompt_defaults_response() -> tuple[int, dict[str, str], bytes]:
+    """Return the factory-default 代理灵魂 / 默认提示词 sourced from Python.
+
+    ``default_soul`` is the AI persona (DEFAULT_GLOBAL_PROMPT);
+    ``default_prompt`` is the instruction scaffold (DEFAULT_PROMPT_TEMPLATE).
+    """
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+    }
+    body = _json_bytes({
+        "success": True,
+        "default_soul": DEFAULT_GLOBAL_PROMPT,
+        "default_prompt": DEFAULT_PROMPT_TEMPLATE,
     })
     return 200, headers, body
 
@@ -301,6 +336,15 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/settings":
             status, headers, body = build_settings_get_response()
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/api/prompt-defaults":
+            status, headers, body = build_prompt_defaults_response()
             self.send_response(status)
             for key, value in headers.items():
                 self.send_header(key, value)

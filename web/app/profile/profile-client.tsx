@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import styles from "./profile.module.css";
+import ThemeToggle from "@/app/theme-toggle";
 
 // 运行时默认值（与服务端契约一致；空字符串表示沿用这些默认值）。
 const TEXT_DEFAULT_URL = "https://api.deepseek.com";
@@ -28,8 +29,12 @@ export default function ProfileClient({ meName }: { meName: string }) {
   const [hasVideoKey, setHasVideoKey] = useState(false);
   const [videoKeyMask, setVideoKeyMask] = useState("");
 
-  // 全局提示词
+  // 代理灵魂 (global_prompt) 与 默认提示词 (default_prompt)
   const [globalPrompt, setGlobalPrompt] = useState("");
+  const [defaultPrompt, setDefaultPrompt] = useState("");
+
+  // 出厂默认值（来自 /api/prompt-defaults，仅代理灵魂需要）
+  const [defaultSoul, setDefaultSoul] = useState("");
 
   const notify = useCallback((text: string, ok: boolean) => setMsg({ text, ok }), []);
 
@@ -49,6 +54,7 @@ export default function ProfileClient({ meName }: { meName: string }) {
         setVideoKeyMask(d.qwenKeyMask || "");
 
         setGlobalPrompt(d.global_prompt || "");
+        setDefaultPrompt(d.default_prompt || "");
       } else {
         notify(d.error || "加载配置失败", false);
       }
@@ -59,21 +65,36 @@ export default function ProfileClient({ meName }: { meName: string }) {
     }
   }, [notify]);
 
+  const loadPromptDefaults = useCallback(async () => {
+    try {
+      const r = await fetch("/api/prompt-defaults", { cache: "no-store" });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.success) {
+        setDefaultSoul(d.default_soul || "");
+      }
+    } catch {
+      /* non-critical, ignore */
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadPromptDefaults();
+  }, [load, loadPromptDefaults]);
 
   async function save() {
     setBusy(true);
     notify("", true);
     try {
-      // key 留空则不发送该字段（沿用现有语义，留空=不变）；url/model/global_prompt 原样发送。
+      // key 留空则不发送该字段（沿用现有语义，留空=不变）；url/model/global_prompt/default_prompt 原样发送。
       const body: Record<string, unknown> = {
         text_api_url: textUrl,
         text_api_model: textModel,
         video_api_url: videoUrl,
         video_api_model: videoModel,
         global_prompt: globalPrompt,
+        default_prompt: defaultPrompt,
       };
       if (textKey.trim()) body.deepseek_api_key = textKey;
       if (videoKey.trim()) body.qwen_api_key = videoKey;
@@ -133,6 +154,13 @@ export default function ProfileClient({ meName }: { meName: string }) {
             </svg>
             {meName}
           </span>
+          <a className={styles.link} href="/knowledge">
+            <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+            知识库
+          </a>
           <a className={styles.link} href="/app">
             <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="m12 19-7-7 7-7" />
@@ -140,6 +168,7 @@ export default function ProfileClient({ meName }: { meName: string }) {
             </svg>
             返回应用
           </a>
+          <ThemeToggle />
           <button className={styles.logout} onClick={logout}>
             <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="m16 17 5-5-5-5" />
@@ -236,16 +265,43 @@ export default function ProfileClient({ meName }: { meName: string }) {
           </div>
 
           <div className={styles.card}>
-            <h2 className={styles.cardTitle}>全局提示词</h2>
+            <div className={styles.cardHeader}>
+              <h2 className={styles.cardTitle}>代理灵魂</h2>
+              <button
+                type="button"
+                className={styles.btnGhost}
+                onClick={() => setGlobalPrompt(defaultSoul)}
+                disabled={!defaultSoul}
+              >
+                <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+                恢复默认
+              </button>
+            </div>
             <textarea
               className={styles.textarea}
-              placeholder="为所有文案生成附加的全局提示词（可选）"
+              placeholder="AI 人设 / 系统提示（可选），为空则使用系统默认人设"
               value={globalPrompt}
               onChange={(e) => setGlobalPrompt(e.target.value)}
               rows={6}
               spellCheck={false}
             />
-            <p className={styles.hint}>生成文案时会自动注入此提示词，对所有平台生效。</p>
+            <p className={styles.hint}>定义 AI 的角色与风格，对所有文案生成生效。为空则回落到系统默认人设。</p>
+          </div>
+
+          <div className={styles.card}>
+            <h2 className={styles.cardTitle}>默认提示词</h2>
+            <textarea
+              className={styles.textarea}
+              placeholder="每次生成文案的任务 / 格式模板（可选），热点与景点素材会自动注入；为空则使用系统默认"
+              value={defaultPrompt}
+              onChange={(e) => setDefaultPrompt(e.target.value)}
+              rows={8}
+              spellCheck={false}
+            />
+            <p className={styles.hint}>这是你的长期任务模板，新账号会分配一份初始模板，之后由你维护；首页"本次提示词"每次以它为起点。</p>
           </div>
 
           <div className={styles.saveRow}>

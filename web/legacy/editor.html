@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HotStream 文案编辑器</title>
+  <script>(function(){try{var t=localStorage.getItem('hotstream.theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
   <style>
     :root {
       --bg: #0e120f;
@@ -71,6 +72,7 @@
 
     header {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
       gap: 16px;
@@ -98,11 +100,15 @@
     }
 
     .toolbar {
+      /* Drop the toolbar onto its own row below the brand so it never sits under
+         the fixed top-right user bar (用户信息/草稿/登出). */
+      flex: 1 1 100%;
       display: flex;
       flex-wrap: wrap;
       justify-content: flex-end;
       align-items: center;
       gap: 10px;
+      margin-top: 6px;
     }
 
     .btn {
@@ -358,6 +364,37 @@
       .editor-tools, .material-grid { grid-template-columns: 1fr; }
       .preview-doc { padding: 24px 22px 32px; }
     }
+
+    :root[data-theme="light"] {
+      --bg:           #f3f6f2;
+      --surface:      #ffffff;
+      --surface-2:    #eef2ee;
+      --surface-3:    #e3e9e4;
+      --border:        #dde4de;
+      --border-strong: #c6cfc8;
+      --card:          #ffffff;
+      --line:          #dde4de;
+      --text:        #18201b;
+      --text-2:      #3d4843;
+      --muted:       #5d6860;
+      --primary:        #137055;
+      --primary-hover:  #1a9670;
+      --primary-active: #11684d;
+      --primary-soft:   rgba(21, 128, 95, 0.12);
+      --primary-ring:   rgba(21, 128, 95, 0.32);
+      --accent:         #137055;
+      --accent-soft:    rgba(21, 128, 95, 0.12);
+      --accent-warm:      #8a5e10;
+      --accent-warm-soft: rgba(154, 106, 18, 0.15);
+      --on-accent: #ffffff;
+      --ok:        #1f9c66;
+      --danger:    #c62f46;
+      --danger-soft:  rgba(198, 47, 70, 0.12);
+      --shadow:       0 1px 2px rgba(20, 30, 24, 0.08);
+      --shadow-menu:  0 6px 20px rgba(20, 30, 24, 0.12);
+    }
+
+    :root.theme-anim, :root.theme-anim *, :root.theme-anim *::before, :root.theme-anim *::after { transition: background-color .3s ease, border-color .3s ease, color .3s ease, fill .3s ease, box-shadow .3s ease !important; }
   </style>
 </head>
 <body>
@@ -1085,6 +1122,12 @@
         drafts.innerHTML = draftSvg + ' 草稿';
         drafts.style.cssText = 'display:inline-flex;align-items:center;gap:5px;color:var(--accent-warm);text-decoration:none;';
         bar.appendChild(drafts);
+        const bookSvg = '<svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+        const knowledge = document.createElement('a');
+        knowledge.href = '/knowledge';
+        knowledge.innerHTML = bookSvg + ' 知识库';
+        knowledge.style.cssText = 'display:inline-flex;align-items:center;gap:5px;color:var(--accent-warm);text-decoration:none;';
+        bar.appendChild(knowledge);
         const gearSvg = '<svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>';
         const profile = document.createElement('a');
         profile.href = '/profile';
@@ -1096,6 +1139,25 @@
         out.style.cssText = 'display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:13px;';
         out.onclick = async () => { try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {} location.href = '/login'; };
         bar.appendChild(out);
+        const sunSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>';
+        const moonSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>';
+        const themeBtn = document.createElement('button');
+        themeBtn.title = '切换日间/夜间模式';
+        themeBtn.setAttribute('aria-label', '切换日间/夜间模式');
+        themeBtn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);color:var(--accent-warm);border-radius:8px;padding:4px 8px;cursor:pointer;font-size:13px;';
+        function updateThemeIcon() {
+          themeBtn.innerHTML = document.documentElement.getAttribute('data-theme') === 'light' ? moonSvg : sunSvg;
+        }
+        updateThemeIcon();
+        themeBtn.onclick = function() {
+          var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', next);
+          try { localStorage.setItem('hotstream.theme', next); } catch(e) {}
+          document.documentElement.classList.add('theme-anim');
+          setTimeout(function() { document.documentElement.classList.remove('theme-anim'); }, 350);
+          updateThemeIcon();
+        };
+        bar.appendChild(themeBtn);
         document.body.appendChild(bar);
       } catch (e) { /* ignore */ }
     })();

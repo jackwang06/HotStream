@@ -15,6 +15,7 @@ function buildResponse(s: Awaited<ReturnType<typeof getUserSettings>>) {
   return NextResponse.json({
     success: true,
     global_prompt: s.global_prompt || DEFAULT_GLOBAL_PROMPT,
+    default_prompt: s.default_prompt,
     // Backward-compatible flags (homepage gate uses these).
     hasDeepseekKey: deepseek.has,
     hasQwenKey: qwen.has,
@@ -44,6 +45,7 @@ const SaveSchema = z.object({
   text_api_model: z.string().max(200).optional(),
   video_api_url: z.string().max(500).optional(),
   video_api_model: z.string().max(200).optional(),
+  default_prompt: z.string().max(20_000).optional(),
 });
 
 export async function POST(req: Request) {
@@ -73,6 +75,7 @@ export async function POST(req: Request) {
     textApiModel: passthrough(body.text_api_model),
     videoApiUrl: passthrough(body.video_api_url),
     videoApiModel: passthrough(body.video_api_model),
+    defaultPrompt: body.default_prompt === undefined ? null : body.default_prompt,
   });
 
   const s = await getUserSettings(user.id);

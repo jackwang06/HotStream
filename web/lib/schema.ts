@@ -63,9 +63,27 @@ ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS text_api_url    TEX
 ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS text_api_model  TEXT NOT NULL DEFAULT '';
 ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS video_api_url   TEXT NOT NULL DEFAULT '';
 ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS video_api_model TEXT NOT NULL DEFAULT '';
+ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS default_prompt  TEXT NOT NULL DEFAULT '';
 
 ALTER TABLE wangyafei.drafts  ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES wangyafei.users(id) ON DELETE RESTRICT;
 ALTER TABLE wangyafei.history ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES wangyafei.users(id) ON DELETE RESTRICT;
 CREATE INDEX IF NOT EXISTS idx_drafts_user_id  ON wangyafei.drafts(user_id);
 CREATE INDEX IF NOT EXISTS idx_history_user_id ON wangyafei.history(user_id);
+
+-- ── Shared knowledge base (GLOBAL, not per-user). Any logged-in user can add &
+--    view all entries; editing/deleting/enabling is restricted (creator or admin,
+--    enforced in the application layer). Enabled entries are auto-injected into
+--    the AI copy-generation context.
+CREATE TABLE IF NOT EXISTS wangyafei.knowledge_base (
+    id          SERIAL PRIMARY KEY,
+    title       TEXT NOT NULL DEFAULT '',
+    content     TEXT NOT NULL DEFAULT '',
+    tags        TEXT NOT NULL DEFAULT '',
+    enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by  INTEGER REFERENCES wangyafei.users(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_base_enabled    ON wangyafei.knowledge_base(enabled);
+CREATE INDEX IF NOT EXISTS idx_knowledge_base_created_by ON wangyafei.knowledge_base(created_by);
 `;

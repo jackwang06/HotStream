@@ -14,6 +14,13 @@ export function middleware(req: NextRequest) {
   // Auth endpoints manage their own session state; let them through.
   if (pathname.startsWith("/api/auth/")) return NextResponse.next();
 
+  // Public static files served from /public (e.g. /login-bg.jpg) — needed by
+  // the unauthenticated login page. The matcher already excludes /_next/*;
+  // this covers root-level asset files. Auth is still enforced on pages/routes.
+  if (/\.(?:jpe?g|png|gif|svg|webp|avif|ico|bmp|woff2?|ttf|otf|eot|css|js|map|txt|webmanifest)$/i.test(pathname)) {
+    return NextResponse.next();
+  }
+
   // Public pages.
   if (PUBLIC_PAGES.has(pathname)) return NextResponse.next();
 

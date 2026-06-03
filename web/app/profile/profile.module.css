@@ -67,11 +67,45 @@
   padding: var(--space-5);
   margin-bottom: var(--space-5);
 }
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
 .cardTitle {
   font-size: 15px;
   font-weight: 600;
-  margin: 0 0 14px;
+  margin: 0;
   color: var(--muted);
+}
+
+.btnGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  border-radius: var(--radius-md);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+.btnGhost:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--surface-2);
+}
+.btnGhost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btnGhost :global(.icon) {
+  width: 13px;
+  height: 13px;
 }
 
 .field {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import styles from "./login.module.css";
+import ThemeToggle from "@/app/theme-toggle";
 
 export default function LoginForm({ next }: { next: string }) {
   const [username, setUsername] = useState("");
@@ -34,6 +35,9 @@ export default function LoginForm({ next }: { next: string }) {
 
   return (
     <div className={styles.wrap}>
+      <div style={{ position: "fixed", top: 16, right: 16, zIndex: 5 }}>
+        <ThemeToggle />
+      </div>
       <form className={styles.card} onSubmit={onSubmit}>
         <div className={styles.brandRow}>
           <svg

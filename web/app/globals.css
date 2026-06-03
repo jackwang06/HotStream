@@ -82,6 +82,40 @@
   --line:        var(--border);
 }
 
+/* ====================================================================
+   浅色（白天）主题：覆盖基础变量；旧别名(--panel/--accent/--card 等)
+   通过 var() 自动跟随，无需在此重复。选择器特异性高于 :root 保证覆盖。
+   ==================================================================== */
+:root[data-theme="light"] {
+  --bg:           #f3f6f2;
+  --surface:      #ffffff;
+  --surface-2:    #eef2ee;
+  --surface-3:    #e3e9e4;
+  --border:        #dde4de;
+  --border-strong: #c6cfc8;
+  --text:        #18201b;
+  --text-2:      #3d4843;
+  --muted:       #5d6860;
+  --primary:        #137055;
+  --primary-hover:  #1a9670;
+  --primary-active: #11684d;
+  --primary-soft:   rgba(21, 128, 95, 0.12);
+  --primary-ring:   rgba(21, 128, 95, 0.32);
+  --secondary:      #157d7b;
+  --accent-warm:      #8a5e10;
+  --accent-warm-soft: rgba(154, 106, 18, 0.15);
+  --ok:        #1f9c66;  --ok-soft:      rgba(31, 156, 102, 0.14);
+  --warning:   #9a6a12;  --warning-soft: rgba(154, 106, 18, 0.15);
+  --danger:    #c62f46;  --danger-soft:  rgba(198, 47, 70, 0.12);
+  --on-accent: #ffffff;
+  --shadow-sm:    0 1px 2px rgba(20, 30, 24, 0.08);
+  --shadow-menu:  0 6px 20px rgba(20, 30, 24, 0.12);
+  --shadow-modal: 0 24px 60px rgba(20, 30, 24, 0.18);
+}
+
+/* 主题切换瞬间的平滑过渡（由 JS 临时加 .theme-anim 到 <html>，~350ms 后移除） */
+:root.theme-anim, :root.theme-anim *, :root.theme-anim *::before, :root.theme-anim *::after { transition: background-color .3s ease, border-color .3s ease, color .3s ease, fill .3s ease, box-shadow .3s ease !important; }
+
 * {
   box-sizing: border-box;
 }

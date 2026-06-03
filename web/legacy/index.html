@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HotStream · 热点到文案</title>
+  <script>(function(){try{var t=localStorage.getItem('hotstream.theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
   <style>
     :root {
       --bg: #0e120f;
@@ -639,6 +640,37 @@
       .topic-link { grid-column: 3; grid-row: 1 / span 2; }
       .image-grid { grid-template-columns: repeat(2, 1fr); }
     }
+
+    :root[data-theme="light"] {
+      --bg:           #f3f6f2;
+      --surface:      #ffffff;
+      --surface-2:    #eef2ee;
+      --surface-3:    #e3e9e4;
+      --border:        #dde4de;
+      --border-strong: #c6cfc8;
+      --card:          #ffffff;
+      --line:          #dde4de;
+      --text:        #18201b;
+      --text-2:      #3d4843;
+      --muted:       #5d6860;
+      --primary:        #137055;
+      --primary-hover:  #1a9670;
+      --primary-active: #11684d;
+      --primary-soft:   rgba(21, 128, 95, 0.12);
+      --primary-ring:   rgba(21, 128, 95, 0.32);
+      --accent:         #137055;
+      --accent-soft:    rgba(21, 128, 95, 0.12);
+      --accent-warm:      #8a5e10;
+      --accent-warm-soft: rgba(154, 106, 18, 0.15);
+      --on-accent: #ffffff;
+      --ok:        #1f9c66;
+      --danger:    #c62f46;
+      --danger-soft:  rgba(198, 47, 70, 0.12);
+      --shadow:       0 1px 2px rgba(20, 30, 24, 0.08);
+      --shadow-menu:  0 6px 20px rgba(20, 30, 24, 0.12);
+    }
+
+    :root.theme-anim, :root.theme-anim *, :root.theme-anim *::before, :root.theme-anim *::after { transition: background-color .3s ease, border-color .3s ease, color .3s ease, fill .3s ease, box-shadow .3s ease !important; }
   </style>
 </head>
 <body>
@@ -693,24 +725,22 @@
           <div class="card-title"><span class="step">2</span><h2>生成文案</h2></div>
         </div>
         <div class="card-body">
-          <textarea id="brief" placeholder="文案要求：口吻、平台、字数、目标用户"></textarea>
-          <details class="advanced-settings" open>
-            <summary><span style="display:inline-flex;align-items:center;gap:8px;color:inherit;font-size:inherit;font-weight:inherit"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>高级设置</span><svg class="icon chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-            <div class="prompt-editor">
-              <div class="settings-link-hint">API 与全局提示词请在<a href="/profile">「用户信息」</a>中配置。</div>
-              <div class="video-analysis hidden" id="videoAnalysisPanel">
-                <button class="ghost-btn" id="analyzeVideoBtn" type="button">用 Qwen2.5-VL 分析所选 B站视频</button>
-                <div class="video-analysis-output" id="videoAnalysisOutput">选择 B站视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。</div>
-              </div>
-              <div class="prompt-field">
-                <label for="temporaryPrompt">本次提示词</label>
-                <textarea id="temporaryPrompt" placeholder="本次提示词"></textarea>
-              </div>
-              <div class="prompt-tools">
-                <button class="ghost-btn" id="resetPromptsBtn">恢复本次提示词默认</button>
-              </div>
+          <div class="prompt-editor">
+            <div class="settings-link-hint">API、代理灵魂与默认提示词请在<a href="/profile">「用户信息」</a>中配置。</div>
+            <div class="settings-link-hint">本次提示词初始等于你的「默认提示词」(在<a href="/profile">「用户信息」</a>里维护)；热点信息/景点画像/视频分析会在生成时自动附加，无需写进本框。可临时微调；想长期生效就写回默认提示词。</div>
+            <div class="settings-link-hint">生成时会自动参考<a href="/knowledge">「知识库」</a>中已启用的条目；想有针对性就在本次提示词里点明(如'重点宣传下月15号的篝火晚会')。</div>
+            <div class="video-analysis hidden" id="videoAnalysisPanel">
+              <button class="ghost-btn" id="analyzeVideoBtn" type="button">用 Qwen2.5-VL 分析所选 B站视频</button>
+              <div class="video-analysis-output" id="videoAnalysisOutput">选择 B站视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。</div>
             </div>
-          </details>
+            <div class="prompt-field">
+              <label for="temporaryPrompt">本次提示词</label>
+              <textarea id="temporaryPrompt" placeholder="本次提示词"></textarea>
+            </div>
+            <div class="prompt-tools">
+              <button class="ghost-btn" id="resetPromptsBtn">恢复成默认提示词</button>
+            </div>
+          </div>
           <button class="main-btn accent" id="generateBtn">生成文案</button>
           <div class="edit-flow" aria-label="编辑入口">
             <button class="ghost-btn primary-edit" id="editContentBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>生成后编辑内容</button>
@@ -752,7 +782,6 @@
     const sourceSelect = document.getElementById('source');
     const bilibiliTools = document.getElementById('bilibiliTools');
     const bilibiliCategory = document.getElementById('bilibiliCategory');
-    const briefInput = document.getElementById('brief');
     const analyzeVideoBtn = document.getElementById('analyzeVideoBtn');
     const videoAnalysisPanel = document.getElementById('videoAnalysisPanel');
     const videoAnalysisOutput = document.getElementById('videoAnalysisOutput');
@@ -846,24 +875,12 @@
       `;
     }
 
-    async function loadPromptsForCurrentTopic({ silent = false } = {}) {
-      const topic = selectedTopic || {};
-      const brief = briefInput.value.trim();
-      try {
-        const response = await fetch('/api/prompts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic, brief, qwen_analysis: lastVideoAnalysis })
-        });
-        const payload = await response.json();
-        if (!payload.success) throw new Error(payload.error || '提示词加载失败');
-        // The global prompt is now managed on the 用户信息 (/profile) page and
-        // injected server-side; here we only manage the per-run temporary prompt.
-        temporaryPromptInput.value = payload.temporary_prompt || '';
-        if (!silent) showToast('已恢复本次提示词默认');
-      } catch (error) {
-        if (!silent) showToast(error.message || '提示词加载失败');
-      }
+    // The "本次提示词" box is每次生成的起点，初始值等于用户的「默认提示词」
+    // (user_settings.default_prompt, read from GET /api/settings). 它只放纯指令
+    // 模板，不含热点素材；后端在 build_default_temporary_prompt(default_prompt=框内容)
+    // 时自动拼接 热点/景点画像/视频分析。代理灵魂(global_prompt)与知识库仍由服务端注入。
+    function applyDefaultPrompt() {
+      temporaryPromptInput.value = userDefaultPrompt;
     }
 
     function filteredTopics() {
@@ -915,12 +932,7 @@
         } else if (changed) {
           resetVideoAnalysis(isBilibiliMode() ? '已选择 B站视频。请填写 Qwen API Key 后点击“分析所选 B站视频”。' : '切换到 B站视频后，可先分析视频内容。');
         }
-        if (changed) {
-          briefInput.value = isBilibiliMode()
-            ? `请基于这个 B站视频热点和 Qwen 视频分析结果，写一篇宣传前山牧场四季牧歌民俗风情园的推文成稿，适合小红书/公众号，语气自然，不要硬广，不要编造视频拍摄地。`
-            : `请基于「${selectedTopic.title}」直接写一篇宣传前山牧场四季牧歌民俗风情园的推文成稿，适合小红书/公众号开头，语气简洁、有信息量。不要输出写作建议或可选角度。`;
-          loadPromptsForCurrentTopic({ silent: true });
-        }
+        // 本次提示词与具体热点无关、不随选热点变化；这里不再重载提示词。
         showToast('已选择热点');
       }
 
@@ -1005,6 +1017,9 @@
     // API is configured, to gate the generate / analyze buttons.
     let deepseekConfigured = false;
     let qwenConfigured = false;
+    // 用户的「默认提示词」(user_settings.default_prompt)。本次提示词初始等于它。
+    let userDefaultPrompt = '';
+    let defaultPromptInitialized = false;
     async function loadServerSettings() {
       try {
         const response = await fetch('/api/settings', { cache: 'no-store' });
@@ -1012,6 +1027,12 @@
         if (data.success) {
           deepseekConfigured = !!data.hasDeepseekKey;
           qwenConfigured = !!data.hasQwenKey;
+          userDefaultPrompt = data.default_prompt || '';
+          // 仅在初次加载或框为空时填入，避免覆盖用户正在输入的内容。
+          if (!defaultPromptInitialized || !temporaryPromptInput.value.trim()) {
+            applyDefaultPrompt();
+          }
+          defaultPromptInitialized = true;
         }
       } catch (e) {
         // server not available, use empty defaults
@@ -1019,7 +1040,18 @@
     }
 
     loadServerSettings();
-    document.getElementById('resetPromptsBtn').addEventListener('click', () => loadPromptsForCurrentTopic());
+    document.getElementById('resetPromptsBtn').addEventListener('click', async () => {
+      // 重新读取最新的 default_prompt，再把本次提示词重置为它。
+      try {
+        const response = await fetch('/api/settings', { cache: 'no-store' });
+        const data = await response.json();
+        if (data && data.success) userDefaultPrompt = data.default_prompt || '';
+      } catch (e) {
+        // 拉取失败则沿用当前已缓存的 userDefaultPrompt。
+      }
+      applyDefaultPrompt();
+      showToast('已恢复为默认提示词');
+    });
 
     function renderVideoAnalysis(analysis) {
       if (!analysis) {
@@ -1061,7 +1093,6 @@
         lastAnalyzedVideoUrl = topicKey(selectedTopic);
         renderVideoAnalysis(lastVideoAnalysis);
         if (lastVideoImages.length) renderImages(lastVideoImages);
-        await loadPromptsForCurrentTopic({ silent: true });
         showToast('视频分析完成');
       } catch (error) {
         resetVideoAnalysis(`视频分析失败：${error.message}`);
@@ -1073,7 +1104,7 @@
     });
 
     updateSourceModeUI();
-    loadPromptsForCurrentTopic({ silent: true });
+    // 本次提示词由 loadServerSettings() 用用户的 default_prompt 初始化填入。
     fetchHotTopics({ silent: true });
     setInterval(() => fetchHotTopics({ silent: true }), 60000);
 
@@ -1082,12 +1113,10 @@
         showToast('请先选择一个热点');
         return;
       }
-      const brief = briefInput.value.trim();
       if (!deepseekConfigured) {
         showToast('请先在「用户信息」配置文案生成 API');
         return;
       }
-      const temporaryPrompt = temporaryPromptInput.value.trim();
       if (selectedTopic.source === 'B站' && (!lastVideoAnalysis || lastAnalyzedVideoUrl !== topicKey(selectedTopic))) {
         showToast('请先用 Qwen 分析所选 B站视频');
         return;
@@ -1104,8 +1133,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             topic: selectedTopic,
-            brief,
-            temporary_prompt: temporaryPrompt,
+            default_prompt: temporaryPromptInput.value.trim(),
             qwen_analysis: lastVideoAnalysis,
             source_images: lastVideoImages
           })
@@ -1244,9 +1272,7 @@
       lastCopyFilename = 'hotstream-copy.txt';
       lastGeneratedImages = [];
       lastGeneratedDraft = null;
-      briefInput.value = '';
-      temporaryPromptInput.value = '';
-      loadPromptsForCurrentTopic({ silent: true });
+      applyDefaultPrompt();
       output.textContent = '文案结果会显示在这里。';
       resetImagesPlaceholder();
       resetVideoAnalysis();
@@ -1283,6 +1309,12 @@
         drafts.innerHTML = draftSvg + ' 草稿';
         drafts.style.cssText = 'display:inline-flex;align-items:center;gap:5px;color:var(--primary);text-decoration:none;';
         bar.appendChild(drafts);
+        const bookSvg = '<svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+        const knowledge = document.createElement('a');
+        knowledge.href = '/knowledge';
+        knowledge.innerHTML = bookSvg + ' 知识库';
+        knowledge.style.cssText = 'display:inline-flex;align-items:center;gap:5px;color:var(--primary);text-decoration:none;';
+        bar.appendChild(knowledge);
         const gearSvg = '<svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>';
         const profile = document.createElement('a');
         profile.href = '/profile';
@@ -1294,6 +1326,25 @@
         out.style.cssText = 'display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:13px;';
         out.onclick = async () => { try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {} location.href = '/login'; };
         bar.appendChild(out);
+        const sunSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>';
+        const moonSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>';
+        const themeBtn = document.createElement('button');
+        themeBtn.title = '切换日间/夜间模式';
+        themeBtn.setAttribute('aria-label', '切换日间/夜间模式');
+        themeBtn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);color:var(--text-2);border-radius:8px;padding:4px 8px;cursor:pointer;font-size:13px;';
+        function updateThemeIcon() {
+          themeBtn.innerHTML = document.documentElement.getAttribute('data-theme') === 'light' ? moonSvg : sunSvg;
+        }
+        updateThemeIcon();
+        themeBtn.onclick = function() {
+          var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', next);
+          try { localStorage.setItem('hotstream.theme', next); } catch(e) {}
+          document.documentElement.classList.add('theme-anim');
+          setTimeout(function() { document.documentElement.classList.remove('theme-anim'); }, 350);
+          updateThemeIcon();
+        };
+        bar.appendChild(themeBtn);
         document.body.appendChild(bar);
       } catch (e) { /* ignore */ }
     })();

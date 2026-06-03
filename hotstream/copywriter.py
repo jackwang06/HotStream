@@ -37,6 +37,27 @@ DEFAULT_GLOBAL_PROMPT = (
 
 DEFAULT_USER_BRIEF = "适合小红书/公众号开头，语气简洁、有信息量，可直接发布。"
 
+# 「默认提示词」= 每次生成文案的"任务+硬性要求+输出格式"指令脚手架。
+# 这是与具体热点无关的指令模板，per-user 的 user_settings.default_prompt 为空时回落到它。
+# 措辞与原 build_default_temporary_prompt 逐字保留，不要改写规则内容。
+DEFAULT_PROMPT_TEMPLATE = (
+    "请基于以下热点写一篇可直接发布的中文推文。\n\n"
+    "硬性要求：\n"
+    "1. 直接写成最终成稿，不要输出写作建议、选题建议、分析框架。\n"
+    "2. 不要输出可选角度，不要使用“可以从三个角度”“建议从”等顾问式表达。\n"
+    "3. 以热点标题、视频分析和景点画像能确认的事实为边界；没有明确给出的内容，不能当成已经发生的细节来写。\n"
+    "4. 推文必须服务于前山牧场四季牧歌民俗风情园宣传，热点只作为切入点，不能写成泛热点评论。\n"
+    "5. 如果热点来自 B站视频，不能声称视频拍摄地就是前山牧场，除非源信息明确说明。\n"
+    "6. 禁止编造价格、活动日期、营业时间、优惠政策、名人到访、交通班次、游客评价。\n"
+    "7. 语气像真实公众号/小红书推文：有开头钩子、有信息展开、有情绪/观点、有结尾互动。\n"
+    "8. 字数控制在 250-450 字，段落短，适合移动端阅读。\n\n"
+    "输出格式：\n"
+    "标题：一句有传播感但不夸张的标题\n\n"
+    "开头：2-3 句，直接抓住读者注意力\n\n"
+    "正文：3-5 个短段落，围绕热点和前山牧场四季牧歌展开，不列提纲\n\n"
+    "结尾：一句互动式收束，引导评论或转发"
+)
+
 
 def load_project_env() -> None:
     """Load simple KEY=VALUE pairs from .env without adding a dependency."""
@@ -84,7 +105,21 @@ def _format_qwen_analysis(qwen_analysis: dict[str, Any] | None) -> str:
     return "\n".join(lines)
 
 
-def build_default_temporary_prompt(topic: dict[str, Any], brief: str = "", qwen_analysis: dict[str, Any] | None = None) -> str:
+def build_default_temporary_prompt(
+    topic: dict[str, Any],
+    brief: str = "",
+    qwen_analysis: dict[str, Any] | None = None,
+    default_prompt: str | None = None,
+) -> str:
+    """Assemble the per-generation user prompt.
+
+    Structure: instruction scaffold first (the static "task + hard rules +
+    output format" template, which a user may override via ``default_prompt``),
+    then the dynamic材料 block (this hot topic's title/source/heat, the Qwen
+    video analysis, the scenic profile and the user's extra brief). The
+    instruction scaffold is hot-topic agnostic; everything below the separator
+    is auto-assembled from the current request.
+    """
     title = str(topic.get("title", "")).strip()
     source = str(topic.get("source", "今日头条")).strip() or "今日头条"
     hot_value = topic.get("hot_value", "")
@@ -108,28 +143,21 @@ def build_default_temporary_prompt(topic: dict[str, Any], brief: str = "", qwen_
     qwen_section = _format_qwen_analysis(qwen_analysis)
     scenic_section = scenic_profile_prompt_section()
 
-    return (
-        "请基于以下热点写一篇可直接发布的中文推文。\n\n"
-        + "\n".join(topic_lines)
+    instructions = (default_prompt or "").strip() or DEFAULT_PROMPT_TEMPLATE
+
+    materials = (
+        "\n".join(topic_lines)
         + ("\n\n" + qwen_section if qwen_section else "")
         + "\n\n景点画像与宣传约束：\n"
         + scenic_section
         + "\n\n用户补充要求："
         + user_brief
-        + "\n\n硬性要求：\n"
-        + "1. 直接写成最终成稿，不要输出写作建议、选题建议、分析框架。\n"
-        + "2. 不要输出可选角度，不要使用“可以从三个角度”“建议从”等顾问式表达。\n"
-        + "3. 以热点标题、视频分析和景点画像能确认的事实为边界；没有明确给出的内容，不能当成已经发生的细节来写。\n"
-        + "4. 推文必须服务于前山牧场四季牧歌民俗风情园宣传，热点只作为切入点，不能写成泛热点评论。\n"
-        + "5. 如果热点来自 B站视频，不能声称视频拍摄地就是前山牧场，除非源信息明确说明。\n"
-        + "6. 禁止编造价格、活动日期、营业时间、优惠政策、名人到访、交通班次、游客评价。\n"
-        + "7. 语气像真实公众号/小红书推文：有开头钩子、有信息展开、有情绪/观点、有结尾互动。\n"
-        + "8. 字数控制在 250-450 字，段落短，适合移动端阅读。\n\n"
-        + "输出格式：\n"
-        + "标题：一句有传播感但不夸张的标题\n\n"
-        + "开头：2-3 句，直接抓住读者注意力\n\n"
-        + "正文：3-5 个短段落，围绕热点和前山牧场四季牧歌展开，不列提纲\n\n"
-        + "结尾：一句互动式收束，引导评论或转发"
+    )
+
+    return (
+        instructions
+        + "\n\n——以下是本次热点信息与可用素材，请据此写作——\n\n"
+        + materials
     )
 
 
@@ -139,14 +167,34 @@ def build_deepseek_messages(
     global_prompt: str | None = None,
     temporary_prompt: str | None = None,
     qwen_analysis: dict[str, Any] | None = None,
+    knowledge_base: str | None = None,
+    default_prompt: str | None = None,
 ) -> list[dict[str, str]]:
     system_prompt = (global_prompt or DEFAULT_GLOBAL_PROMPT).strip()
-    user_prompt = (temporary_prompt or build_default_temporary_prompt(topic=topic, brief=brief, qwen_analysis=qwen_analysis)).strip()
+    user_prompt = (
+        temporary_prompt
+        or build_default_temporary_prompt(
+            topic=topic,
+            brief=brief,
+            qwen_analysis=qwen_analysis,
+            default_prompt=default_prompt,
+        )
+    ).strip()
 
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    knowledge_text = (knowledge_base or "").strip()
+    if knowledge_text:
+        messages.append({
+            "role": "system",
+            "content": (
+                "以下是景区知识库参考资料（用户上传的景点/活动等信息）。"
+                "生成推文时应优先据此宣传，并结合用户的本次要求；"
+                "但严禁编造知识库与热点信息中未提供的事实：\n\n"
+                + knowledge_text
+            ),
+        })
+    messages.append({"role": "user", "content": user_prompt})
+    return messages
 
 
 
@@ -171,6 +219,8 @@ def generate_copy_with_deepseek(
     temporary_prompt: str | None = None,
     qwen_analysis: dict[str, Any] | None = None,
     api_url: str | None = None,
+    knowledge_base: str | None = None,
+    default_prompt: str | None = None,
 ) -> str:
     """Generate copy for a selected hot topic using DeepSeek chat completions."""
     load_project_env()
@@ -188,6 +238,8 @@ def generate_copy_with_deepseek(
             global_prompt=global_prompt,
             temporary_prompt=temporary_prompt,
             qwen_analysis=qwen_analysis,
+            knowledge_base=knowledge_base,
+            default_prompt=default_prompt,
         ),
         "temperature": 0.72,
         "max_tokens": 1200,
