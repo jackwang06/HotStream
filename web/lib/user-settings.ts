@@ -9,6 +9,7 @@ export interface RawUserSettings {
   video_api_url: string;
   video_api_model: string;
   default_prompt: string;
+  active_preset_id: number | null;
 }
 
 const EMPTY_SETTINGS: RawUserSettings = {
@@ -20,13 +21,14 @@ const EMPTY_SETTINGS: RawUserSettings = {
   video_api_url: "",
   video_api_model: "",
   default_prompt: "",
+  active_preset_id: null,
 };
 
 export async function getUserSettings(userId: number): Promise<RawUserSettings> {
   const { rows } = await query<RawUserSettings>(
     `SELECT deepseek_api_key, qwen_api_key, global_prompt,
             text_api_url, text_api_model, video_api_url, video_api_model,
-            default_prompt
+            default_prompt, active_preset_id
        FROM user_settings WHERE user_id = $1`,
     [userId],
   );
@@ -48,6 +50,9 @@ export async function saveUserSettings(
     videoApiUrl?: string | null;
     videoApiModel?: string | null;
     defaultPrompt?: string | null;
+    // `undefined` / null = leave unchanged. (Use setActivePreset in lib/presets.ts
+    // to clear/point this at a specific preset with ownership checks.)
+    activePresetId?: number | null;
   },
 ): Promise<void> {
   const deepseek = fields.deepseekKey ?? null;
@@ -58,14 +63,15 @@ export async function saveUserSettings(
   const videoUrl = fields.videoApiUrl ?? null;
   const videoModel = fields.videoApiModel ?? null;
   const defaultPrompt = fields.defaultPrompt ?? null;
+  const activePresetId = fields.activePresetId ?? null;
   await query(
     `INSERT INTO user_settings (
        user_id, deepseek_api_key, qwen_api_key, global_prompt,
        text_api_url, text_api_model, video_api_url, video_api_model,
-       default_prompt)
+       default_prompt, active_preset_id)
      VALUES ($1, COALESCE($2, ''), COALESCE($3, ''), COALESCE($4, ''),
              COALESCE($5, ''), COALESCE($6, ''), COALESCE($7, ''), COALESCE($8, ''),
-             COALESCE($9, ''))
+             COALESCE($9, ''), $10)
      ON CONFLICT (user_id) DO UPDATE SET
        deepseek_api_key = COALESCE($2, user_settings.deepseek_api_key),
        qwen_api_key     = COALESCE($3, user_settings.qwen_api_key),
@@ -75,8 +81,9 @@ export async function saveUserSettings(
        video_api_url    = COALESCE($7, user_settings.video_api_url),
        video_api_model  = COALESCE($8, user_settings.video_api_model),
        default_prompt   = COALESCE($9, user_settings.default_prompt),
+       active_preset_id = COALESCE($10, user_settings.active_preset_id),
        updated_at       = now()`,
-    [userId, deepseek, qwen, prompt, textUrl, textModel, videoUrl, videoModel, defaultPrompt],
+    [userId, deepseek, qwen, prompt, textUrl, textModel, videoUrl, videoModel, defaultPrompt, activePresetId],
   );
 }
 

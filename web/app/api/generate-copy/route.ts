@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser, unauthorized, assertSameOrigin } from "@/lib/session";
 import { getUserSettings } from "@/lib/user-settings";
 import { getEnabledKnowledge } from "@/lib/knowledge";
+import { getActivePresetContent } from "@/lib/presets";
 import { proxyPostJson } from "@/lib/proxy";
 
 export const dynamic = "force-dynamic";
@@ -63,9 +64,11 @@ export async function POST(req: Request) {
     payload.global_prompt = settings.global_prompt;
   }
   // Body (i.e., the page's "本次提示词") takes priority; fall back to the
-  // user's saved default_prompt only when the request body didn't supply one.
-  if (!payload.default_prompt && settings.default_prompt) {
-    payload.default_prompt = settings.default_prompt;
+  // user's effective default prompt (active preset → legacy column) only when
+  // the request body didn't supply one.
+  if (!payload.default_prompt) {
+    const effective = await getActivePresetContent(user.id);
+    if (effective) payload.default_prompt = effective;
   }
   // Inject the enabled shared knowledge-base entries (global, server-side).
   const knowledge = await buildKnowledgeText();

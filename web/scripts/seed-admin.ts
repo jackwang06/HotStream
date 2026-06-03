@@ -4,8 +4,8 @@
 import { loadEnvConfig } from "@next/env";
 import { getPool, query } from "../lib/db";
 import { hashPassword } from "../lib/auth";
-import { getUserSettings, saveUserSettings } from "../lib/user-settings";
 import { getFactoryDefaultPrompt } from "../lib/prompt-defaults";
+import { listPresets, createPreset, setActivePreset } from "../lib/presets";
 
 // Load .env.local etc. before any DB connection is opened (getPool is lazy).
 loadEnvConfig(process.cwd(), true);
@@ -36,18 +36,19 @@ async function main(): Promise<void> {
 
     await query("INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [adminId]);
 
-    // Best-effort: seed admin's default_prompt if it hasn't been set yet.
+    // Best-effort: seed admin's preset if none exist yet.
     try {
-      const adminSettings = await getUserSettings(adminId);
-      if (!adminSettings.default_prompt) {
+      const { presets } = await listPresets(adminId);
+      if (presets.length === 0) {
         const seed = await getFactoryDefaultPrompt();
         if (seed) {
-          await saveUserSettings(adminId, { defaultPrompt: seed });
-          console.log(`[seed-admin] seeded default_prompt for admin '${username}'`);
+          const preset = await createPreset(adminId, "默认", seed);
+          await setActivePreset(adminId, preset.id);
+          console.log(`[seed-admin] seeded '默认' preset for admin '${username}'`);
         }
       }
     } catch (e) {
-      console.warn("[seed-admin] could not seed default_prompt (non-fatal):", (e as Error).message);
+      console.warn("[seed-admin] could not seed preset (non-fatal):", (e as Error).message);
     }
 
     // Adopt any legacy rows that predate per-user scoping so they aren't orphaned.

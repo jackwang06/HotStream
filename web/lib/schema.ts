@@ -65,6 +65,24 @@ ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS video_api_url   TEX
 ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS video_api_model TEXT NOT NULL DEFAULT '';
 ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS default_prompt  TEXT NOT NULL DEFAULT '';
 
+-- ── Named prompt presets (per-user). Users may create/edit/rename/delete an
+--    unlimited number; the one referenced by user_settings.active_preset_id is
+--    the currently selected one (the starting point for the homepage prompt).
+CREATE TABLE IF NOT EXISTS wangyafei.prompt_presets (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES wangyafei.users(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    content     TEXT NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_prompt_presets_user_id ON wangyafei.prompt_presets(user_id);
+
+-- The currently selected preset for each user (NULL = none; falls back to the
+-- legacy user_settings.default_prompt column). ON DELETE SET NULL keeps the
+-- column consistent when a preset is removed.
+ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS active_preset_id INTEGER REFERENCES wangyafei.prompt_presets(id) ON DELETE SET NULL;
+
 ALTER TABLE wangyafei.drafts  ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES wangyafei.users(id) ON DELETE RESTRICT;
 ALTER TABLE wangyafei.history ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES wangyafei.users(id) ON DELETE RESTRICT;
 CREATE INDEX IF NOT EXISTS idx_drafts_user_id  ON wangyafei.drafts(user_id);

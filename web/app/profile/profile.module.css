@@ -158,6 +158,24 @@
   line-height: 1.5;
 }
 
+.presetPreview {
+  margin: 12px 0 14px;
+  padding: 11px 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.presetPreviewEmpty {
+  margin: 12px 0 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .loadingText {
   color: var(--muted);
   font-size: 14px;

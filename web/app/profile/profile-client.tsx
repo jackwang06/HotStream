@@ -87,14 +87,13 @@ export default function ProfileClient({ meName }: { meName: string }) {
     setBusy(true);
     notify("", true);
     try {
-      // key 留空则不发送该字段（沿用现有语义，留空=不变）；url/model/global_prompt/default_prompt 原样发送。
+      // key 留空则不发送该字段（沿用现有语义，留空=不变）；url/model/global_prompt 原样发送。
       const body: Record<string, unknown> = {
         text_api_url: textUrl,
         text_api_model: textModel,
         video_api_url: videoUrl,
         video_api_model: videoModel,
         global_prompt: globalPrompt,
-        default_prompt: defaultPrompt,
       };
       if (textKey.trim()) body.deepseek_api_key = textKey;
       if (videoKey.trim()) body.qwen_api_key = videoKey;
@@ -160,6 +159,23 @@ export default function ProfileClient({ meName }: { meName: string }) {
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
             </svg>
             知识库
+          </a>
+          <a className={styles.link} href="/drafts">
+            <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6" />
+              <path d="M16 13H8" />
+              <path d="M16 17H8" />
+              <path d="M10 9H8" />
+            </svg>
+            草稿
+          </a>
+          <a className={styles.link} href="/presets">
+            <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+              <path d="M7 7h.01" />
+            </svg>
+            预设
           </a>
           <a className={styles.link} href="/app">
             <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -292,16 +308,20 @@ export default function ProfileClient({ meName }: { meName: string }) {
           </div>
 
           <div className={styles.card}>
-            <h2 className={styles.cardTitle}>默认提示词</h2>
-            <textarea
-              className={styles.textarea}
-              placeholder="每次生成文案的任务 / 格式模板（可选），热点与景点素材会自动注入；为空则使用系统默认"
-              value={defaultPrompt}
-              onChange={(e) => setDefaultPrompt(e.target.value)}
-              rows={8}
-              spellCheck={false}
-            />
-            <p className={styles.hint}>这是你的长期任务模板，新账号会分配一份初始模板，之后由你维护；首页"本次提示词"每次以它为起点。</p>
+            <h2 className={styles.cardTitle}>默认提示词预设</h2>
+            <p className={styles.hint}>当前选用预设的内容将作为首页「本次提示词」的起点。</p>
+            {defaultPrompt ? (
+              <p className={styles.presetPreview}>{defaultPrompt.length > 120 ? defaultPrompt.slice(0, 120) + "…" : defaultPrompt}</p>
+            ) : (
+              <p className={styles.presetPreviewEmpty}>（尚未选用任何预设）</p>
+            )}
+            <a className={styles.btn} href="/presets">
+              <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+                <path d="M7 7h.01" />
+              </svg>
+              管理预设 →
+            </a>
           </div>
 
           <div className={styles.saveRow}>

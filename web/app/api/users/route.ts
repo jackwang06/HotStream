@@ -4,8 +4,8 @@ import { query } from "@/lib/db";
 import { getCurrentUser, unauthorized, forbidden, assertSameOrigin } from "@/lib/session";
 import { listUsers } from "@/lib/users";
 import { hashPassword } from "@/lib/auth";
-import { saveUserSettings } from "@/lib/user-settings";
 import { getFactoryDefaultPrompt } from "@/lib/prompt-defaults";
+import { createPreset, setActivePreset } from "@/lib/presets";
 
 export const dynamic = "force-dynamic";
 
@@ -48,10 +48,13 @@ export async function POST(req: Request) {
     const id = rows[0].id;
     await query("INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [id]);
 
-    // Best-effort: seed the new user's default_prompt with the factory template.
+    // Best-effort: seed the new user with a "默认" preset (factory template).
     try {
       const seed = await getFactoryDefaultPrompt();
-      if (seed) await saveUserSettings(id, { defaultPrompt: seed });
+      if (seed) {
+        const preset = await createPreset(id, "默认", seed);
+        await setActivePreset(id, preset.id);
+      }
     } catch {
       // Seed failure must not prevent account creation from succeeding.
     }

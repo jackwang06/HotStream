@@ -3,10 +3,14 @@ import { z } from "zod";
 import { getCurrentUser, unauthorized, assertSameOrigin } from "@/lib/session";
 import { getUserSettings, saveUserSettings, maskKey } from "@/lib/user-settings";
 import { DEFAULT_GLOBAL_PROMPT } from "@/lib/prompts";
+import { getActivePresetContent } from "@/lib/presets";
 
 export const dynamic = "force-dynamic";
 
-function buildResponse(s: Awaited<ReturnType<typeof getUserSettings>>) {
+function buildResponse(
+  s: Awaited<ReturnType<typeof getUserSettings>>,
+  effectiveDefaultPrompt: string,
+) {
   const deepseek = maskKey(s.deepseek_api_key); // 文案 = deepseek
   const qwen = maskKey(s.qwen_api_key); // 视频 = qwen
   // NOTE: raw API keys are intentionally NOT returned to the browser.
@@ -15,7 +19,7 @@ function buildResponse(s: Awaited<ReturnType<typeof getUserSettings>>) {
   return NextResponse.json({
     success: true,
     global_prompt: s.global_prompt || DEFAULT_GLOBAL_PROMPT,
-    default_prompt: s.default_prompt,
+    default_prompt: effectiveDefaultPrompt,
     // Backward-compatible flags (homepage gate uses these).
     hasDeepseekKey: deepseek.has,
     hasQwenKey: qwen.has,
@@ -33,8 +37,11 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return unauthorized();
 
-  const s = await getUserSettings(user.id);
-  return buildResponse(s);
+  const [s, effectiveDefaultPrompt] = await Promise.all([
+    getUserSettings(user.id),
+    getActivePresetContent(user.id),
+  ]);
+  return buildResponse(s, effectiveDefaultPrompt);
 }
 
 const SaveSchema = z.object({
@@ -78,6 +85,9 @@ export async function POST(req: Request) {
     defaultPrompt: body.default_prompt === undefined ? null : body.default_prompt,
   });
 
-  const s = await getUserSettings(user.id);
-  return buildResponse(s);
+  const [s, effectiveDefaultPrompt] = await Promise.all([
+    getUserSettings(user.id),
+    getActivePresetContent(user.id),
+  ]);
+  return buildResponse(s, effectiveDefaultPrompt);
 }
