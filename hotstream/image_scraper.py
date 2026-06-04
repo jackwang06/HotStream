@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import gzip
 import json
 import re
+import zlib
 from html import unescape
 from typing import Any
 from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
@@ -180,7 +182,27 @@ def _extract_bing_metadata(html: str) -> list[dict[str, Any]]:
 
 def _read_url(url: str, timeout: int) -> str:
     with urlopen(_build_request(url), timeout=timeout) as response:
-        return response.read().decode("utf-8", errors="replace")
+        raw = response.read()
+        encoding = response.headers.get("Content-Encoding")
+    # Only act on a real string header; mocked/absent headers fall through
+    # untouched so plain (uncompressed) responses are returned as-is.
+    encoding = encoding.lower() if isinstance(encoding, str) else ""
+    if not isinstance(raw, (bytes, bytearray)):
+        return str(raw)
+    if "gzip" in encoding:
+        try:
+            raw = gzip.decompress(raw)
+        except (OSError, EOFError):
+            pass
+    elif "deflate" in encoding:
+        try:
+            raw = zlib.decompress(raw)
+        except zlib.error:
+            try:
+                raw = zlib.decompress(raw, -zlib.MAX_WBITS)
+            except zlib.error:
+                pass
+    return raw.decode("utf-8", errors="replace")
 
 
 def _fetch_images_from_news_articles(query: str, limit: int, timeout: int) -> list[dict[str, str]]:
@@ -211,6 +233,128 @@ def _fetch_images_from_news_articles(query: str, limit: int, timeout: int) -> li
 def _fetch_images_from_image_search(query: str, limit: int, timeout: int) -> list[dict[str, str]]:
     html = _read_url(build_image_search_url(query), timeout=timeout)
     return _extract_bing_metadata(html)[:limit]
+
+
+# Known video domains / path tokens. Presence of any of these in a URL is a
+# strong signal that the link points at (or embeds) a video.
+_VIDEO_URL_TOKENS = (
+    "bilibili.com/video",
+    "b23.tv",
+    "douyin.com",
+    "v.douyin.com",
+    "iesdouyin",
+    "youtube.com",
+    "youtu.be",
+    "v.qq.com",
+    "ixigua.com",
+    "kuaishou.com",
+    "kuaishou.cn",
+    "weibo.com/tv",
+    "weibo.com/show",
+    "haokan.baidu",
+    "miaopai",
+    "/video/",
+    "/watch",
+)
+
+# Page-level markers that indicate the HTML carries a playable video.
+_VIDEO_HTML_TOKENS = (
+    "playaddr",
+    "play_url",
+    "videourl",
+)
+
+
+def _normalize_https(url: str) -> str:
+    """Normalize a (possibly protocol-relative) URL to an https URL."""
+    value = unescape(str(url or "")).strip()
+    if not value:
+        return ""
+    if value.startswith("//"):
+        return "https:" + value
+    if value.startswith("http://"):
+        return "https://" + value[len("http://"):]
+    return value
+
+
+def _detect_video(url: str, html: str) -> bool:
+    """Detect whether a link/page points at or embeds a video.
+
+    Two independent checks; either one is sufficient:
+      (a) the URL contains a known video domain/path token;
+      (b) the page exposes video metadata/markup (og:video*, og:type=video,
+          twitter:player, a <video> tag, or inline play-address fields).
+    """
+    lowered_url = (url or "").lower()
+    if any(token in lowered_url for token in _VIDEO_URL_TOKENS):
+        return True
+
+    if _meta_content(html, "og:video") or _meta_content(html, "og:video:url") or _meta_content(html, "og:video:secure_url"):
+        return True
+    if "video" in (_meta_content(html, "og:type") or "").lower():
+        return True
+    if _meta_content(html, "twitter:player"):
+        return True
+
+    lowered_html = (html or "").lower()
+    if "<video" in lowered_html:
+        return True
+    if any(token in lowered_html for token in _VIDEO_HTML_TOKENS):
+        return True
+    return False
+
+
+def build_custom_topic(url: str, timeout: int = 10) -> dict[str, Any]:
+    """Fetch an arbitrary URL and build a single topic dict from its metadata.
+
+    Extracts title/description/cover from Open Graph / Twitter / standard tags
+    and decides whether the link carries a video. The returned shape mirrors the
+    topics produced by the hot-list sources so the rest of the pipeline (Qwen
+    analysis + DeepSeek copy generation) treats it uniformly.
+
+    Raises ``RuntimeError`` if the page cannot be fetched.
+    """
+    target = str(url or "").strip()
+    try:
+        html = _read_url(target, timeout=timeout)
+    except Exception as exc:
+        raise RuntimeError(f"无法抓取该链接：{exc}") from exc
+
+    title = (
+        _meta_content(html, "og:title")
+        or _meta_content(html, "twitter:title")
+    )
+    if not title:
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.IGNORECASE | re.DOTALL)
+        if title_match:
+            title = unescape(title_match.group(1)).strip()
+    if not title:
+        title = target
+
+    desc = (
+        _meta_content(html, "og:description")
+        or _meta_content(html, "description")
+        or ""
+    )
+
+    cover_raw = _meta_content(html, "og:image") or _meta_content(html, "twitter:image") or ""
+    cover = _normalize_https(urljoin(target, cover_raw)) if cover_raw else ""
+
+    has_video = _detect_video(target, html)
+
+    return {
+        "rank": 1,
+        "title": title,
+        "url": target,
+        "cover": cover,
+        "desc": desc,
+        "label": "自定义链接",
+        "source": "自定义",
+        "type": "video" if has_video else "article",
+        "has_video": has_video,
+        "hot_value": 0,
+        "metrics": {},
+    }
 
 
 def fetch_related_images(query: str, limit: int = 30, timeout: int = 8) -> list[dict[str, str]]:

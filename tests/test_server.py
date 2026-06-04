@@ -18,7 +18,7 @@ def test_build_hot_topics_response_returns_json_payload():
     assert payload["source_key"] == "zhihu"
     assert payload["topics"][0]["title"] == "A"
     assert "updated_at" in payload
-    fetch.assert_called_once_with("zhihu", limit=20)
+    fetch.assert_called_once_with("zhihu", limit=30)
 
 
 def test_build_hot_topics_response_handles_fetch_error():

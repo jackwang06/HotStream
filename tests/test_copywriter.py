@@ -5,6 +5,7 @@ import pytest
 
 from hotstream.copywriter import (
     DEFAULT_GLOBAL_PROMPT,
+    DEFAULT_PROMPT_TEMPLATE,
     build_default_temporary_prompt,
     build_deepseek_messages,
     generate_copy_with_deepseek,
@@ -99,6 +100,103 @@ def test_build_default_temporary_prompt_includes_qwen_video_analysis_for_bilibil
 def test_default_global_prompt_is_exposed_for_ui_editing():
     assert "资深中文新媒体文案" in DEFAULT_GLOBAL_PROMPT
     assert "不是写作顾问" in DEFAULT_GLOBAL_PROMPT
+
+
+def test_default_prompt_template_holds_only_the_topic_agnostic_scaffold():
+    # The instruction scaffold = writing task + the 8 硬性要求 + 输出格式 section.
+    assert "请基于以下热点写一篇可直接发布的中文推文" in DEFAULT_PROMPT_TEMPLATE
+    assert "硬性要求" in DEFAULT_PROMPT_TEMPLATE
+    assert "不要输出写作建议、选题建议、分析框架" in DEFAULT_PROMPT_TEMPLATE
+    assert "禁止编造价格、活动日期、营业时间" in DEFAULT_PROMPT_TEMPLATE
+    assert "字数控制在 250-450 字" in DEFAULT_PROMPT_TEMPLATE
+    assert "输出格式" in DEFAULT_PROMPT_TEMPLATE
+    assert "结尾：一句互动式收束，引导评论或转发" in DEFAULT_PROMPT_TEMPLATE
+    # It must NOT bake in any concrete hot-topic material.
+    assert "热点标题：" not in DEFAULT_PROMPT_TEMPLATE
+    assert "用户补充要求" not in DEFAULT_PROMPT_TEMPLATE
+    assert "景点画像与宣传约束" not in DEFAULT_PROMPT_TEMPLATE
+
+
+def test_build_default_temporary_prompt_uses_default_template_then_materials():
+    prompt = build_default_temporary_prompt(
+        topic={"title": "AI 应用爆发", "source": "知乎", "hot_value": 12345},
+        brief="公众号，300 字以内",
+    )
+
+    # Instruction scaffold comes first, materials after the separator.
+    separator = "——以下是本次热点信息与可用素材，请据此写作——"
+    assert separator in prompt
+    instructions, _, materials = prompt.partition(separator)
+    # Default path still surfaces the factory template's signature sentences.
+    assert "请基于以下热点写一篇可直接发布的中文推文" in instructions
+    assert "禁止编造价格、活动日期、营业时间" in instructions
+    assert "结尾：一句互动式收束，引导评论或转发" in instructions
+    # Dynamic materials live after the separator, not inside the instructions.
+    assert "热点标题：AI 应用爆发" in materials
+    assert "公众号，300 字以内" in materials
+    assert "前山牧场四季牧歌民俗风情园" in materials
+    assert "热点标题：" not in instructions
+
+
+def test_build_default_temporary_prompt_honors_custom_default_prompt():
+    prompt = build_default_temporary_prompt(
+        topic={"title": "AI 应用爆发", "source": "知乎", "hot_value": 12345},
+        brief="公众号，300 字以内",
+        default_prompt="自定义模板XYZ",
+    )
+
+    assert "自定义模板XYZ" in prompt
+    # The custom scaffold replaces the factory template's signature sentences.
+    assert "请基于以下热点写一篇可直接发布的中文推文" not in prompt
+    assert "结尾：一句互动式收束，引导评论或转发" not in prompt
+    # Dynamic materials are still auto-assembled and injected.
+    assert "热点标题：AI 应用爆发" in prompt
+    assert "公众号，300 字以内" in prompt
+    assert "前山牧场四季牧歌民俗风情园" in prompt
+
+
+def test_build_deepseek_messages_threads_default_prompt_into_user_message():
+    messages = build_deepseek_messages(
+        topic={"title": "AI 应用爆发", "source": "知乎", "hot_value": 12345},
+        brief="补充要求",
+        default_prompt="自定义模板XYZ",
+    )
+
+    assert messages[1]["role"] == "user"
+    assert "自定义模板XYZ" in messages[1]["content"]
+    assert "请基于以下热点写一篇可直接发布的中文推文" not in messages[1]["content"]
+    # Materials still injected even with a custom scaffold.
+    assert "AI 应用爆发" in messages[1]["content"]
+
+
+def test_generate_copy_with_deepseek_threads_default_prompt_into_request_body():
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": "生成结果"}}]}).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    with patch("hotstream.copywriter.urlopen", fake_urlopen):
+        generate_copy_with_deepseek(
+            topic={"title": "AI 应用爆发"},
+            brief="",
+            api_key="test-key",
+            default_prompt="自定义模板XYZ",
+        )
+
+    user_message = captured["body"]["messages"][1]["content"]
+    assert "自定义模板XYZ" in user_message
+    assert "请基于以下热点写一篇可直接发布的中文推文" not in user_message
 
 
 def test_generate_copy_with_deepseek_posts_chat_completion_request():

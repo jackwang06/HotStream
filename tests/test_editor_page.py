@@ -78,7 +78,8 @@ def test_home_page_has_bilibili_video_controls_and_qwen_flow():
 
     assert 'value="bilibili"' in content
     assert "B站视频" in content
-    assert 'id="bilibiliCategory"' in content
+    # Category dropdown is now the unified #category element (visible for all sources).
+    assert 'id="category"' in content
     assert 'id="qwenApiKey"' in content
     assert "/api/settings" in content
     assert "loadServerSettings" in content
@@ -105,5 +106,6 @@ def test_home_page_bilibili_query_is_sent_to_backend_not_only_local_filter():
     assert "params.set('keyword'" in content
     assert "params.set('category'" in content
     assert "params.set('sort', 'traffic_desc')" in content
-    assert "bilibiliCategory.value" in content
+    # Category is now sent via the unified categorySelect element.
+    assert "categorySelect.value" in content
     assert "/api/hot-topics?${params.toString()}" in content

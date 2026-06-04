@@ -404,7 +404,7 @@
     }
 
     .bilibili-tools {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
     }
 
     .video-analysis {
@@ -604,20 +604,22 @@
               <option value="zhihu">知乎</option>
               <option value="bilibili">B站视频</option>
             </select>
-            <input id="keyword" placeholder="可选关键词，例如：草原、避暑、团建" />
-          </div>
-          <div class="bilibili-tools hidden" id="bilibiliTools">
-            <select id="bilibiliCategory" aria-label="B站视频分类">
-              <option value="all">全部热门</option>
-              <option value="life">生活</option>
-              <option value="travel">出行/旅行</option>
+            <select id="category" aria-label="分类筛选">
+              <option value="all">全部</option>
+              <option value="travel">出行·旅行</option>
               <option value="food">美食</option>
+              <option value="rural">乡村·三农</option>
+              <option value="culture">文化·民俗</option>
+              <option value="life">生活</option>
+              <option value="entertainment">娱乐</option>
               <option value="knowledge">知识</option>
               <option value="technology">科技</option>
-              <option value="entertainment">娱乐</option>
-              <option value="documentary">纪录片</option>
             </select>
-            <span class="hint">B站按公开播放量从高到低展示；输入关键词会请求 B站搜索接口。</span>
+            <input id="limit" type="number" min="1" max="100" step="1" value="30" aria-label="抓取条数" title="抓取条数（1-100）" />
+            <input id="keyword" placeholder="可选关键词，例如：草原、避暑、团建" />
+          </div>
+          <div class="bilibili-tools" id="bilibiliTools">
+            <span class="hint">分类对所有来源生效（按标题关键词筛选）；B站按公开播放量从高到低展示，输入关键词会请求 B站搜索接口。</span>
           </div>
           <button class="main-btn" id="fetchBtn">刷新今日头条热点</button>
           <div class="fetch-meta" id="fetchMeta">进入页面后自动抓取，每 60 秒刷新一次。</div>
@@ -704,8 +706,8 @@
     const fetchMeta = document.getElementById('fetchMeta');
     const keywordInput = document.getElementById('keyword');
     const sourceSelect = document.getElementById('source');
-    const bilibiliTools = document.getElementById('bilibiliTools');
-    const bilibiliCategory = document.getElementById('bilibiliCategory');
+    const categorySelect = document.getElementById('category');
+    const limitInput = document.getElementById('limit');
     const briefInput = document.getElementById('brief');
     const deepseekApiKeyInput = document.getElementById('deepseekApiKey');
     const qwenApiKeyInput = document.getElementById('qwenApiKey');
@@ -735,9 +737,15 @@
 
     function updateSourceModeUI() {
       const isBili = isBilibiliMode();
-      bilibiliTools.classList.toggle('hidden', !isBili);
+      // 分类下拉对所有来源显示；仅视频分析面板随 B站 显隐。
       videoAnalysisPanel.classList.toggle('hidden', !isBili);
       if (!isBili) resetVideoAnalysis('切换到 B站视频后，可先分析视频内容。');
+    }
+
+    function currentLimit() {
+      const value = parseInt(limitInput.value, 10);
+      if (!Number.isFinite(value)) return 30;
+      return Math.max(1, Math.min(100, value));
     }
 
     function showToast(text) {
@@ -882,10 +890,11 @@
       if (!silent) topicList.innerHTML = `<div class="empty">正在抓取${escapeHtml(sourceLabel)}热点...</div>`;
 
       try {
-        const params = new URLSearchParams({ source, limit: '20' });
+        const params = new URLSearchParams({ source, limit: String(currentLimit()) });
+        const category = categorySelect.value;
+        if (category && category !== 'all') params.set('category', category);
         if (isBilibiliMode()) {
           params.set('sort', 'traffic_desc');
-          params.set('category', bilibiliCategory.value);
           if (keywordInput.value.trim()) params.set('keyword', keywordInput.value.trim());
         }
         const response = await fetch(`/api/hot-topics?${params.toString()}`, { cache: 'no-store' });
@@ -912,9 +921,8 @@
       updateSourceModeUI();
       fetchHotTopics();
     });
-    bilibiliCategory.addEventListener('change', () => {
-      if (isBilibiliMode()) fetchHotTopics();
-    });
+    categorySelect.addEventListener('change', () => fetchHotTopics());
+    limitInput.addEventListener('change', () => fetchHotTopics());
     keywordInput.addEventListener('input', () => {
       if (isBilibiliMode()) return;
       renderTopics();

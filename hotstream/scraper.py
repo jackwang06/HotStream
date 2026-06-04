@@ -8,8 +8,62 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 TOUTIAO_HOT_BOARD_URL = "https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc"
-ZHIHU_HOT_LIST_URL = "https://api.zhihu.com/topstory/hot-list?limit=50&reverse_order=0"
+ZHIHU_HOT_LIST_URL = "https://api.zhihu.com/topstory/hot-list?limit={limit}&reverse_order=0"
 XIAOHONGSHU_EXPLORE_URL = "https://www.xiaohongshu.com/explore"
+
+# Largest internal page size used to over-fetch a source before category
+# filtering, so topic-keyword filters always have ample material to match.
+FETCH_ALL_LIMIT = 100
+
+# Unified topic taxonomy shared across every source. ``keywords`` drives the
+# substring topic filter; ``bili_rid`` (when present) is the native Bilibili
+# region id used for region/search ranking. Sources without a native category
+# concept rely purely on ``keywords`` filtering.
+CATEGORIES: dict[str, dict[str, Any]] = {
+    "all": {"label": "全部", "keywords": []},
+    "travel": {
+        "label": "出行·旅行",
+        "bili_rid": "250",
+        "keywords": ["旅行", "旅游", "出行", "出游", "景区", "景点", "自驾", "露营",
+                     "度假", "攻略", "打卡", "民宿", "酒店", "风光", "户外", "徒步", "周边游"],
+    },
+    "food": {
+        "label": "美食",
+        "bili_rid": "211",
+        "keywords": ["美食", "小吃", "火锅", "烧烤", "探店", "美味",
+                     "零食", "特产", "餐厅", "厨艺"],
+    },
+    "rural": {
+        "label": "乡村·三农",
+        "keywords": ["乡村", "农村", "农业", "丰收", "田园", "牧场", "草原", "牧民",
+                     "放牧", "采摘", "农家", "三农", "牛羊"],
+    },
+    "culture": {
+        "label": "文化·民俗",
+        "keywords": ["文化", "非遗", "民俗", "古镇", "博物", "展", "演出", "节",
+                     "传统", "民族", "手工", "戏"],
+    },
+    "life": {
+        "label": "生活",
+        "bili_rid": "160",
+        "keywords": ["生活", "日常", "vlog", "好物", "家居", "宠物", "亲子"],
+    },
+    "entertainment": {
+        "label": "娱乐",
+        "bili_rid": "5",
+        "keywords": ["明星", "综艺", "演唱会", "影视", "剧", "娱乐", "电影", "音乐"],
+    },
+    "knowledge": {
+        "label": "知识",
+        "bili_rid": "36",
+        "keywords": ["知识", "科普", "历史", "教育", "文化"],
+    },
+    "technology": {
+        "label": "科技",
+        "bili_rid": "188",
+        "keywords": ["科技", "数码", "AI", "人工智能", "手机", "互联网", "智能"],
+    },
+}
 
 SOURCE_LABELS = {
     "toutiao": "今日头条",
@@ -94,6 +148,35 @@ def _request(url: str, referer: str, timeout: int) -> bytes:
 
 def _limit(topics: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
     return topics[:max(1, limit)]
+
+
+def _filter_topics_by_category(
+    topics: list[dict[str, Any]],
+    category_key: str | None,
+) -> list[dict[str, Any]]:
+    """Keep topics whose text matches any keyword of ``category_key``.
+
+    Returns ``topics`` unchanged when the category is empty, ``"all"`` or
+    unknown. Otherwise the title/label/desc text is matched case-insensitively
+    against the category keywords via substring containment.
+    """
+    key = str(category_key or "").strip().lower()
+    if not key or key == "all":
+        return topics
+    keywords = [kw.lower() for kw in (CATEGORIES.get(key, {}).get("keywords") or [])]
+    if not keywords:
+        return topics
+    filtered: list[dict[str, Any]] = []
+    for topic in topics:
+        haystack = " ".join(
+            str(topic.get(field) or "")
+            for field in ("title", "label", "desc")
+        ).lower()
+        if any(kw in haystack for kw in keywords):
+            filtered.append(topic)
+    for index, topic in enumerate(filtered, start=1):
+        topic["rank"] = index
+    return filtered
 
 
 def _clean_html(value: Any) -> str:
@@ -301,8 +384,15 @@ def fetch_toutiao_hot_topics(limit: int = 20, timeout: int = 10) -> list[dict[st
 
 
 def fetch_zhihu_hot_topics(limit: int = 20, timeout: int = 10) -> list[dict[str, Any]]:
-    """Fetch live hot topics from Zhihu's mobile hot-list endpoint."""
-    raw = _request(ZHIHU_HOT_LIST_URL, referer="https://www.zhihu.com/hot", timeout=timeout)
+    """Fetch live hot topics from Zhihu's mobile hot-list endpoint.
+
+    The requested ``limit`` is forwarded to the API ``limit`` query param
+    (clamped to 1..100) so over-fetching for category filtering pulls a wider
+    list straight from Zhihu.
+    """
+    url_limit = max(1, min(FETCH_ALL_LIMIT, limit))
+    url = ZHIHU_HOT_LIST_URL.format(limit=url_limit)
+    raw = _request(url, referer="https://www.zhihu.com/hot", timeout=timeout)
     payload = json.loads(raw.decode("utf-8"))
     topics = parse_zhihu_hot_list(payload)
     return _limit(topics, limit)
@@ -346,10 +436,21 @@ def parse_bilibili_region(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _bilibili_category_rid(category: str | None) -> str:
+    """Resolve a category to a native Bilibili region id, or "" when none.
+
+    A category maps to a native rid when it is listed in
+    ``BILIBILI_CATEGORY_RIDS`` or is already a numeric rid. Unified categories
+    without a native region (e.g. rural/culture) resolve to "" so callers fall
+    back to the popular list + keyword filtering.
+    """
     normalized = str(category or "").strip().lower()
     if not normalized or normalized == "all":
         return ""
-    return BILIBILI_CATEGORY_RIDS.get(normalized, normalized)
+    if normalized in BILIBILI_CATEGORY_RIDS:
+        return BILIBILI_CATEGORY_RIDS[normalized]
+    if normalized.isdigit():
+        return normalized
+    return ""
 
 
 def fetch_bilibili_hot_topics(
@@ -367,6 +468,10 @@ def fetch_bilibili_hot_topics(
     """
     keyword_text = str(keyword or "").strip()
     rid = _bilibili_category_rid(category)
+    # Categories without a native Bilibili region (e.g. rural/culture) fall back
+    # to the popular list, then keyword-filter on the unified taxonomy.
+    category_key = str(category or "").strip().lower()
+    filter_after = bool(category_key) and category_key != "all" and not rid and not keyword_text
     if keyword_text:
         params = {
             "search_type": "video",
@@ -386,6 +491,8 @@ def fetch_bilibili_hot_topics(
     else:
         raw = _request(BILIBILI_POPULAR_URL, referer="https://www.bilibili.com/v/popular/all", timeout=timeout)
         topics = parse_bilibili_popular(json.loads(raw.decode("utf-8")))
+    if filter_after:
+        topics = _filter_topics_by_category(topics, category_key)
     if sort == "traffic_desc":
         topics.sort(key=lambda item: item.get("hot_value") or 0, reverse=True)
         for index, topic in enumerate(topics, start=1):
@@ -508,14 +615,26 @@ def fetch_hot_topics(
     sort: str | None = None,
 ) -> list[dict[str, Any]]:
     normalized = (source or "toutiao").strip().lower()
-    if normalized in {"toutiao", "今日头条"}:
-        return fetch_toutiao_hot_topics(limit=limit, timeout=timeout)
-    if normalized in {"zhihu", "知乎"}:
-        return fetch_zhihu_hot_topics(limit=limit, timeout=timeout)
-    if normalized in {"xiaohongshu", "xhs", "小红书"}:
-        return fetch_xiaohongshu_hot_topics(limit=limit, timeout=timeout)
+
+    # Bilibili keeps its native region/search dispatch (best quality); the
+    # over-fetch + keyword fallback for rid-less categories lives inside
+    # fetch_bilibili_hot_topics.
     if normalized in {"bilibili", "b站", "哔哩哔哩", "bili"}:
         return fetch_bilibili_hot_topics(limit=limit, timeout=timeout, keyword=keyword, category=category, sort=sort)
-    if normalized in {"douyin", "抖音", "dy"}:
-        return fetch_douyin_hot_topics(limit=limit, timeout=timeout, keyword=keyword)
-    raise ValueError(f"不支持的数据源：{source}")
+
+    # Every other source: over-fetch the natural list, apply the unified
+    # category keyword filter, then truncate to the user's limit. category/sort
+    # are NOT forwarded to fetch_* helpers that do not accept them.
+    if normalized in {"toutiao", "今日头条"}:
+        topics = fetch_toutiao_hot_topics(limit=FETCH_ALL_LIMIT, timeout=timeout)
+    elif normalized in {"zhihu", "知乎"}:
+        topics = fetch_zhihu_hot_topics(limit=FETCH_ALL_LIMIT, timeout=timeout)
+    elif normalized in {"xiaohongshu", "xhs", "小红书"}:
+        topics = fetch_xiaohongshu_hot_topics(limit=FETCH_ALL_LIMIT, timeout=timeout)
+    elif normalized in {"douyin", "抖音", "dy"}:
+        topics = fetch_douyin_hot_topics(limit=FETCH_ALL_LIMIT, timeout=timeout, keyword=keyword)
+    else:
+        raise ValueError(f"不支持的数据源：{source}")
+
+    topics = _filter_topics_by_category(topics, category)
+    return _limit(topics, limit)

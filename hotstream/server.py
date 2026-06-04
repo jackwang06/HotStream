@@ -17,7 +17,7 @@ from hotstream.copywriter import (
     build_default_temporary_prompt,
     generate_copy_with_deepseek,
 )
-from hotstream.image_scraper import fetch_related_images
+from hotstream.image_scraper import build_custom_topic, fetch_related_images
 from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics
 from hotstream.video_analyzer import analyze_video_with_qwen
 
@@ -51,7 +51,7 @@ def _normalize_source(source: str) -> str:
 
 
 def build_hot_topics_response(
-    limit: int = 20,
+    limit: int = 30,
     source: str = "toutiao",
     keyword: str | None = None,
     category: str | None = None,
@@ -66,6 +66,9 @@ def build_hot_topics_response(
     }
     try:
         fetch_kwargs: dict[str, Any] = {"limit": limit}
+        # Forward keyword/category/sort whenever the user supplied any of them
+        # (category now drives filtering on every source) or for the video
+        # sources whose native dispatch always accepts these arguments.
         if source_key in {"bilibili", "douyin"} or keyword or category or sort:
             fetch_kwargs.update({"keyword": keyword, "category": category, "sort": sort})
         topics = fetch_hot_topics(source_key, **fetch_kwargs)
@@ -219,6 +222,31 @@ def build_prompt_defaults_response() -> tuple[int, dict[str, str], bytes]:
     return 200, headers, body
 
 
+def build_custom_source_response(url: str, timeout: int = 10) -> tuple[int, dict[str, str], bytes]:
+    """Build the /api/custom-source JSON response for a user-pasted link.
+
+    Fetches the URL, extracts a single topic (title/cover/desc) and reports
+    whether the page carries a video so the UI can offer video analysis.
+    """
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+    }
+    target = str(url or "").strip()
+    if not target.startswith(("http://", "https://")):
+        return 400, headers, _json_bytes({"success": False, "error": "链接必须以 http:// 或 https:// 开头"})
+    try:
+        topic = build_custom_topic(target, timeout=timeout)
+        body = _json_bytes({
+            "success": True,
+            "topic": topic,
+            "has_video": bool(topic.get("has_video")),
+        })
+        return 200, headers, body
+    except Exception as exc:
+        return 502, headers, _json_bytes({"success": False, "error": str(exc)})
+
+
 def build_video_analysis_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
     """Build the /api/analyze-video JSON response."""
     headers = {
@@ -300,12 +328,12 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path in {"/api/toutiao-hot", "/api/hot-topics"}:
             params = parse_qs(parsed.query)
-            limit = 20
+            limit = 30
             if "limit" in params:
                 try:
-                    limit = max(1, min(50, int(params["limit"][0])))
+                    limit = max(1, min(100, int(params["limit"][0])))
                 except (TypeError, ValueError):
-                    limit = 20
+                    limit = 30
             source = params.get("source", ["toutiao"])[0]
             keyword = params.get("keyword", [""])[0]
             category = params.get("category", [""])[0]
@@ -319,6 +347,17 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
                 category=category or None,
                 sort=sort or None,
             )
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/api/custom-source":
+            params = parse_qs(parsed.query)
+            custom_url = params.get("url", [""])[0]
+            status, headers, body = build_custom_source_response(custom_url)
             self.send_response(status)
             for key, value in headers.items():
                 self.send_header(key, value)

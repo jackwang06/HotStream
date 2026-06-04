@@ -3,7 +3,11 @@ from unittest.mock import patch
 
 import pytest
 
-from hotstream.video_analyzer import analyze_video_with_qwen, build_video_materials
+from hotstream.video_analyzer import (
+    _build_qwen_messages,
+    analyze_video_with_qwen,
+    build_video_materials,
+)
 
 
 def test_build_video_materials_uses_bilibili_cover_as_editable_material():
@@ -23,6 +27,52 @@ def test_build_video_materials_uses_bilibili_cover_as_editable_material():
             "source": "B站封面",
         }
     ]
+
+
+def test_build_video_materials_douyin_source_label():
+    topic = {
+        "title": "抖音热点视频",
+        "cover": "https://p3-sign.douyinpic.com/cover.jpg",
+        "source": "抖音",
+    }
+
+    materials = build_video_materials(topic)
+
+    assert len(materials) == 1
+    assert materials[0]["title"] == "抖音视频封面：抖音热点视频"
+    assert materials[0]["source"] == "抖音封面"
+    assert materials[0]["url"] == "https://p3-sign.douyinpic.com/cover.jpg"
+
+
+def test_build_qwen_messages_bilibili_topic_contains_bilibili_not_douyin():
+    topic = {
+        "title": "B站热门",
+        "url": "https://www.bilibili.com/video/BVTEST",
+        "cover": "https://i0.hdslb.com/cover.jpg",
+        "source": "B站",
+    }
+
+    messages = _build_qwen_messages(topic)
+    user_text = messages[1]["content"][-1]["text"]
+
+    assert "B站" in user_text
+    assert "抖音" not in user_text
+
+
+def test_build_qwen_messages_douyin_topic_contains_douyin_not_bilibili():
+    topic = {
+        "title": "草原骑马挑战",
+        "url": "https://www.douyin.com/hot/123456",
+        "cover": "https://p3-sign.douyinpic.com/cover.jpg",
+        "source": "抖音",
+        "metrics": {"hot_value": 980000, "video_count": 2000, "discuss_video_count": 300},
+    }
+
+    messages = _build_qwen_messages(topic)
+    user_text = messages[1]["content"][-1]["text"]
+
+    assert "抖音" in user_text
+    assert "B站" not in user_text
 
 
 def test_analyze_video_with_qwen_posts_dashscope_compatible_request():
