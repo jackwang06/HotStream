@@ -725,6 +725,7 @@
             <label for="limitInput" style="margin-left:8px;font-size:0.85em;color:var(--text-muted,#888);">条数</label>
             <input id="limitInput" type="number" min="1" max="100" step="1" value="30"
               style="width:60px;margin-left:4px;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:0.9em;" />
+            <span class="hint" style="margin-left:4px;">上限100；实际条数受各平台供给限制：B站可满100，抖音/头条约50，知乎/小红书约30。</span>
             <span class="hint" id="sourceHint">B站按公开播放量从高到低展示；输入关键词会请求 B站搜索接口。</span>
           </div>
           <button class="main-btn" id="fetchBtn">刷新今日头条热点</button>
