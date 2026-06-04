@@ -489,8 +489,30 @@ def fetch_bilibili_hot_topics(
         raw = _request(url, referer="https://www.bilibili.com/", timeout=timeout)
         topics = parse_bilibili_region(json.loads(raw.decode("utf-8")))
     else:
-        raw = _request(BILIBILI_POPULAR_URL, referer="https://www.bilibili.com/v/popular/all", timeout=timeout)
-        topics = parse_bilibili_popular(json.loads(raw.decode("utf-8")))
+        # 热门列表每页 50 条；按 pn 翻页以满足更大的 limit（最多到 100，封顶 4 页）。
+        topics = []
+        seen_ids: set[Any] = set()
+        max_pages = min(4, max(1, (int(limit) + 49) // 50))
+        for pn in range(1, max_pages + 1):
+            page_url = f"https://api.bilibili.com/x/web-interface/popular?ps=50&pn={pn}"
+            try:
+                raw = _request(page_url, referer="https://www.bilibili.com/v/popular/all", timeout=timeout)
+                page_topics = parse_bilibili_popular(json.loads(raw.decode("utf-8")))
+            except Exception:
+                if pn == 1:
+                    raise  # 首页错误照常抛出（与单次抓取一致，含 API code error）
+                break  # 仅后续页失败时优雅停止，保留已取到的
+
+            if not page_topics:
+                break
+            for item in page_topics:
+                key = item.get("bvid") or item.get("url")
+                if key in seen_ids:
+                    continue
+                seen_ids.add(key)
+                topics.append(item)
+            if len(topics) >= int(limit):
+                break
     if filter_after:
         topics = _filter_topics_by_category(topics, category_key)
     if sort == "traffic_desc":
@@ -532,38 +554,45 @@ def parse_douyin_hot_search(payload: dict[str, Any]) -> list[dict[str, Any]]:
     Preserves the official hot-board ordering (word_list position) as rank.
     """
     data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
-    rows = data.get("word_list") or []
     topics: list[dict[str, Any]] = []
+    seen: set[Any] = set()
 
-    for row in rows:
-        if not isinstance(row, dict):
+    # 抖音免签热榜每个列表上限约 50；合并 word_list + trending_list + recommend_list
+    # 并按 sentence_id/group_id/word 去重，尽量多榨出唯一热点（仍受平台 ~50-55 上限约束）。
+    for list_key in ("word_list", "trending_list", "recommend_list"):
+        rows = data.get(list_key)
+        if not isinstance(rows, list):
             continue
-        word = str(row.get("word") or "").strip()
-        if not word:
-            continue
-        hot_value = _to_int(row.get("hot_value"))
-        word_cover = row.get("word_cover") if isinstance(row.get("word_cover"), dict) else {}
-        url_list = word_cover.get("url_list") if isinstance(word_cover.get("url_list"), list) else []
-        cover = _normalize_image_url(url_list[0]) if url_list else ""
-        label = _douyin_label(row.get("label"), hot_value)
-        video_count = _to_int(row.get("video_count"))
-        discuss_video_count = _to_int(row.get("discuss_video_count"))
-        topics.append({
-            "rank": len(topics) + 1,
-            "title": word,
-            "url": _douyin_topic_url(row.get("sentence_id"), word),
-            "hot_value": hot_value,
-            "label": label,
-            "source": "抖音",
-            "type": "video",
-            "cover": cover,
-            "desc": "",
-            "metrics": {
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            word = str(row.get("word") or "").strip()
+            if not word:
+                continue
+            dedup_key = row.get("sentence_id") or row.get("group_id") or word
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+            hot_value = _to_int(row.get("hot_value"))
+            word_cover = row.get("word_cover") if isinstance(row.get("word_cover"), dict) else {}
+            url_list = word_cover.get("url_list") if isinstance(word_cover.get("url_list"), list) else []
+            cover = _normalize_image_url(url_list[0]) if url_list else ""
+            topics.append({
+                "rank": len(topics) + 1,
+                "title": word,
+                "url": _douyin_topic_url(row.get("sentence_id"), word),
                 "hot_value": hot_value,
-                "video_count": video_count,
-                "discuss_video_count": discuss_video_count,
-            },
-        })
+                "label": _douyin_label(row.get("label"), hot_value),
+                "source": "抖音",
+                "type": "video",
+                "cover": cover,
+                "desc": "",
+                "metrics": {
+                    "hot_value": hot_value,
+                    "video_count": _to_int(row.get("video_count")),
+                    "discuss_video_count": _to_int(row.get("discuss_video_count")),
+                },
+            })
 
     return topics
 
