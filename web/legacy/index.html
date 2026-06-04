@@ -1212,9 +1212,13 @@
           const firstItem = document.querySelector('.topic');
           if (firstItem) firstItem.classList.add('selected');
           if (fetchMeta) fetchMeta.textContent = `已解析链接 · 更新时间 ${formatTime(new Date().toISOString())}`;
-          if (topic.has_video) {
+          if (topic.has_video && topic.cover) {
             videoAnalysisPanel.classList.remove('hidden');
-            resetVideoAnalysis('已解析视频，可点击“分析所选视频”');
+            resetVideoAnalysis('已解析视频，可点击”分析所选视频”');
+          } else if (topic.has_video && !topic.cover) {
+            videoAnalysisPanel.classList.remove('hidden');
+            resetVideoAnalysis('已识别为视频，但未能获取封面，分析质量可能下降——可直接生成文案');
+            videoAnalysisOutput.textContent = '已识别为视频，但未能获取封面，分析质量可能下降——可直接生成文案';
           } else {
             videoAnalysisPanel.classList.add('hidden');
             resetVideoAnalysis('未检测到视频，可直接生成文案');

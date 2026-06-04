@@ -19,13 +19,21 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/120.0.0.0 Safari/537.36"
 )
+# Some SPA sites (notably Douyin) only server-side render Open Graph / structured
+# metadata for mobile/crawler clients. Falling back to this UA lets us recover a
+# title + cover that the desktop UA fetch leaves empty.
+MOBILE_USER_AGENT = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+    "Version/16.6 Mobile/15E148 Safari/604.1"
+)
 
 
-def _build_request(url: str) -> Request:
+def _build_request(url: str, user_agent: str = USER_AGENT) -> Request:
     return Request(
         url,
         headers={
-            "User-Agent": USER_AGENT,
+            "User-Agent": user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         },
@@ -180,8 +188,8 @@ def _extract_bing_metadata(html: str) -> list[dict[str, Any]]:
     return results
 
 
-def _read_url(url: str, timeout: int) -> str:
-    with urlopen(_build_request(url), timeout=timeout) as response:
+def _read_url(url: str, timeout: int, user_agent: str = USER_AGENT) -> str:
+    with urlopen(_build_request(url, user_agent), timeout=timeout) as response:
         raw = response.read()
         encoding = response.headers.get("Content-Encoding")
     # Only act on a real string header; mocked/absent headers fall through
@@ -304,6 +312,136 @@ def _detect_video(url: str, html: str) -> bool:
     return False
 
 
+def _read_url_with_ua(url: str, timeout: int, user_agent: str) -> str:
+    """Fetch *url* using *user_agent*, degrading gracefully when ``_read_url`` is
+    mocked with the legacy ``(url, timeout)`` signature.
+
+    The custom-source tests monkeypatch ``_read_url`` with a 2-arg stub that does
+    not accept ``user_agent``; calling it with the keyword would raise
+    ``TypeError``. We catch that and retry without the UA so both the real (UA-
+    aware) implementation and the test doubles work unchanged.
+    """
+    try:
+        return _read_url(url, timeout, user_agent=user_agent)
+    except TypeError:
+        return _read_url(url, timeout)
+
+
+# Douyin / Iesdouyin domains we know how to resolve into a share page.
+_DOUYIN_HOSTS = ("douyin.com", "iesdouyin.com")
+# Short-link hosts that 3xx-redirect to a URL carrying the aweme_id.
+_DOUYIN_SHORTLINK_HOSTS = ("v.douyin.com", "z.douyin.com")
+
+
+def _is_douyin_url(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return any(host == h or host.endswith("." + h) for h in _DOUYIN_HOSTS)
+
+
+def _extract_aweme_id(url: str) -> str:
+    """Pull the 19-ish digit aweme/video id out of a Douyin URL, if present."""
+    match = re.search(r"/(?:video|note|share/video|share/note)/(\d{6,25})", url)
+    if match:
+        return match.group(1)
+    query = parse_qs(urlparse(url).query)
+    for key in ("modal_id", "aweme_id", "item_id", "vid"):
+        values = query.get(key) or []
+        if values and values[0].isdigit():
+            return values[0]
+    return ""
+
+
+def _resolve_shortlink(url: str, timeout: int) -> str:
+    """Follow a Douyin short link to its final URL (which carries the aweme_id).
+
+    urllib follows redirects by default, so a normal mobile-UA fetch lands on the
+    expanded URL; ``response.geturl()`` returns it. Returns the original URL on
+    any failure so callers can fall back.
+    """
+    try:
+        request = _build_request(url, MOBILE_USER_AGENT)
+        with urlopen(request, timeout=timeout) as response:
+            return response.geturl() or url
+    except Exception:
+        return url
+
+
+def _parse_douyin_share_page(html: str) -> tuple[str, str]:
+    """Extract (title, cover) from an iesdouyin /share/video SSR page.
+
+    The page embeds ``window._ROUTER_DATA`` whose
+    ``loaderData["video_(id)/page"].videoInfoRes.item_list[0]`` holds ``desc``
+    (the caption / title) and ``video.cover`` (plus origin/dynamic fallbacks).
+    Returns ("", "") if the structure is missing or the item was filtered out.
+    """
+    match = re.search(r"window\._ROUTER_DATA\s*=\s*(\{.*?\})\s*</script>", html, flags=re.DOTALL)
+    if not match:
+        return "", ""
+    try:
+        data = json.loads(match.group(1))
+    except (json.JSONDecodeError, TypeError):
+        return "", ""
+
+    loader = data.get("loaderData") if isinstance(data, dict) else None
+    if not isinstance(loader, dict):
+        return "", ""
+    # The key literally contains "(id)"; fall back to any *page entry holding it.
+    page = loader.get("video_(id)/page")
+    if not isinstance(page, dict):
+        for value in loader.values():
+            if isinstance(value, dict) and "videoInfoRes" in value:
+                page = value
+                break
+    if not isinstance(page, dict):
+        return "", ""
+
+    info = page.get("videoInfoRes")
+    items = info.get("item_list") if isinstance(info, dict) else None
+    if not isinstance(items, list) or not items or not isinstance(items[0], dict):
+        return "", ""
+    item = items[0]
+
+    title = str(item.get("desc") or "").strip()
+    video = item.get("video") if isinstance(item.get("video"), dict) else {}
+    cover = ""
+    for cover_key in ("cover", "origin_cover", "dynamic_cover"):
+        candidate = video.get(cover_key) if isinstance(video, dict) else None
+        url_list = candidate.get("url_list") if isinstance(candidate, dict) else None
+        if isinstance(url_list, list):
+            for raw in url_list:
+                normalized = _normalize_https(raw)
+                if normalized:
+                    cover = normalized
+                    break
+        if cover:
+            break
+    return title, cover
+
+
+def _resolve_douyin(url: str, timeout: int) -> tuple[str, str]:
+    """Best-effort (title, cover) for a Douyin video link.
+
+    Resolves short links, extracts the aweme_id, then reads the iesdouyin share
+    page with a mobile UA and parses its embedded structured data. Never raises;
+    returns ("", "") so ``build_custom_topic`` can fall back to generic OG tags.
+    """
+    try:
+        target = url
+        host = urlparse(url).netloc.lower()
+        if any(host == h or host.endswith("." + h) for h in _DOUYIN_SHORTLINK_HOSTS):
+            target = _resolve_shortlink(url, timeout)
+
+        aweme_id = _extract_aweme_id(target) or _extract_aweme_id(url)
+        if not aweme_id:
+            return "", ""
+
+        share_url = f"https://www.iesdouyin.com/share/video/{aweme_id}/"
+        html = _read_url_with_ua(share_url, timeout, MOBILE_USER_AGENT)
+        return _parse_douyin_share_page(html)
+    except Exception:
+        return "", ""
+
+
 def build_custom_topic(url: str, timeout: int = 10) -> dict[str, Any]:
     """Fetch an arbitrary URL and build a single topic dict from its metadata.
 
@@ -341,6 +479,50 @@ def build_custom_topic(url: str, timeout: int = 10) -> dict[str, Any]:
     cover = _normalize_https(urljoin(target, cover_raw)) if cover_raw else ""
 
     has_video = _detect_video(target, html)
+
+    # Douyin is a heavily anti-scraped SPA: a desktop-UA fetch returns a JS shell
+    # with empty OG tags, so title/cover come back blank (title falls back to the
+    # URL). Resolve the real caption + cover via the iesdouyin share page. Any
+    # failure leaves the generic-OG values untouched.
+    if _is_douyin_url(target):
+        dy_title, dy_cover = _resolve_douyin(target, min(timeout, 8))
+        if dy_title and (not title or title == target):
+            title = dy_title
+        if dy_cover:
+            cover = dy_cover
+
+    # Generic SPA fallback: if a desktop-UA fetch yielded no cover image, retry
+    # once with a mobile/crawler UA, which many SPAs server-side render OG for.
+    # Skipped for Douyin — _resolve_douyin already did the mobile-UA share-page
+    # work, so this would only add a redundant (and latency-bounding) fetch.
+    if not cover and not _is_douyin_url(target):
+        try:
+            mobile_html = _read_url_with_ua(target, min(timeout, 8), MOBILE_USER_AGENT)
+        except Exception:
+            mobile_html = ""
+        if mobile_html:
+            if not title or title == target:
+                mobile_title = (
+                    _meta_content(mobile_html, "og:title")
+                    or _meta_content(mobile_html, "twitter:title")
+                )
+                if mobile_title:
+                    title = mobile_title
+            if not desc:
+                desc = (
+                    _meta_content(mobile_html, "og:description")
+                    or _meta_content(mobile_html, "description")
+                    or desc
+                )
+            mobile_cover = (
+                _meta_content(mobile_html, "og:image")
+                or _meta_content(mobile_html, "twitter:image")
+                or ""
+            )
+            if mobile_cover:
+                cover = _normalize_https(urljoin(target, mobile_cover))
+            if not has_video:
+                has_video = _detect_video(target, mobile_html)
 
     return {
         "rank": 1,

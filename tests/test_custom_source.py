@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import pytest
 
-from hotstream.image_scraper import build_custom_topic
+from hotstream.image_scraper import (
+    build_custom_topic,
+    _extract_aweme_id,
+    _is_douyin_url,
+    _parse_douyin_share_page,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -285,3 +290,271 @@ def test_build_custom_topic_raises_runtime_error_on_fetch_failure(monkeypatch):
     monkeypatch.setattr("hotstream.image_scraper._read_url", _failing_read_url)
     with pytest.raises(RuntimeError, match="无法抓取该链接"):
         build_custom_topic("https://example.com/unreachable")
+
+
+# ---------------------------------------------------------------------------
+# Fixtures: Douyin SPA JS shell (desktop UA returns no OG metadata)
+# ---------------------------------------------------------------------------
+
+# Real-world Douyin desktop-UA response: ~72KB of JS with no og:* tags.
+DOUYIN_SPA_SHELL_HTML = """\
+<html>
+<head><title>抖音</title></head>
+<body>
+  <div id="app"></div>
+  <script>/* SPA bootstrap JS */</script>
+</body>
+</html>
+"""
+
+# Synthetic iesdouyin share-page response with embedded _ROUTER_DATA.
+_AWEME_ID = "7300000000000000001"
+_DOUYIN_SHARE_TITLE = "春日牧场骑马探险 #旅游 #前山牧场"
+_DOUYIN_SHARE_COVER = "https://p3-sign.douyinpic.com/tos-cn-p-0015/cover_fake.jpeg"
+
+IESDOUYIN_SHARE_PAGE_HTML = f"""\
+<html>
+<head><title>抖音视频</title></head>
+<body>
+<script>
+window._ROUTER_DATA = {{
+  "loaderData": {{
+    "video_(id)/page": {{
+      "videoInfoRes": {{
+        "item_list": [
+          {{
+            "aweme_id": "{_AWEME_ID}",
+            "desc": "{_DOUYIN_SHARE_TITLE}",
+            "video": {{
+              "cover": {{
+                "uri": "cover_fake",
+                "url_list": ["{_DOUYIN_SHARE_COVER}"]
+              }}
+            }}
+          }}
+        ]
+      }}
+    }}
+  }}
+}}
+</script>
+</body>
+</html>
+"""
+
+
+# ---------------------------------------------------------------------------
+# Helpers: Douyin mock callables
+# ---------------------------------------------------------------------------
+
+def _make_read_url_douyin(share_html: str = IESDOUYIN_SHARE_PAGE_HTML):
+    """Return a _read_url stub that:
+    - returns DOUYIN_SPA_SHELL_HTML for www.douyin.com (desktop UA fetch)
+    - returns *share_html* for iesdouyin.com (share page fetch by _resolve_douyin)
+    - returns DOUYIN_SPA_SHELL_HTML for any other URL
+    """
+    def _read_url(url: str, timeout: int = 10) -> str:  # noqa: ARG001
+        if "iesdouyin.com" in url:
+            return share_html
+        return DOUYIN_SPA_SHELL_HTML
+    return _read_url
+
+
+def _make_resolve_douyin(title: str, cover: str):
+    """Return a _resolve_douyin stub that always yields (title, cover)."""
+    def _resolve_douyin(_url: str, _timeout: int = 10) -> tuple[str, str]:  # noqa: ARG001
+        return title, cover
+    return _resolve_douyin
+
+
+# ---------------------------------------------------------------------------
+# Tests: _extract_aweme_id
+# ---------------------------------------------------------------------------
+
+class TestExtractAwemeId:
+    """Unit-test the aweme_id extractor for all supported URL shapes."""
+
+    def test_video_path(self):
+        url = "https://www.douyin.com/video/7300000000000000000"
+        assert _extract_aweme_id(url) == "7300000000000000000"
+
+    def test_note_path(self):
+        url = "https://www.douyin.com/note/7300000000000000002"
+        assert _extract_aweme_id(url) == "7300000000000000002"
+
+    def test_share_video_path(self):
+        url = "https://www.iesdouyin.com/share/video/7300000000000000003/"
+        assert _extract_aweme_id(url) == "7300000000000000003"
+
+    def test_modal_id_query_param(self):
+        url = "https://www.douyin.com/discover?modal_id=7300000000000000004"
+        assert _extract_aweme_id(url) == "7300000000000000004"
+
+    def test_aweme_id_query_param(self):
+        url = "https://www.douyin.com/?aweme_id=7300000000000000005"
+        assert _extract_aweme_id(url) == "7300000000000000005"
+
+    def test_item_id_query_param(self):
+        url = "https://www.douyin.com/watch?item_id=7300000000000000006"
+        assert _extract_aweme_id(url) == "7300000000000000006"
+
+    def test_vid_query_param(self):
+        url = "https://www.douyin.com/?vid=7300000000000000007"
+        assert _extract_aweme_id(url) == "7300000000000000007"
+
+    def test_short_link_no_id_returns_empty(self):
+        url = "https://v.douyin.com/iXXXXXXXX/"
+        assert _extract_aweme_id(url) == ""
+
+    def test_non_douyin_url_returns_empty(self):
+        assert _extract_aweme_id("https://example.com/page") == ""
+
+
+# ---------------------------------------------------------------------------
+# Tests: _is_douyin_url
+# ---------------------------------------------------------------------------
+
+class TestIsDouyinUrl:
+    def test_www_douyin(self):
+        assert _is_douyin_url("https://www.douyin.com/video/123") is True
+
+    def test_iesdouyin(self):
+        assert _is_douyin_url("https://www.iesdouyin.com/share/video/123/") is True
+
+    def test_shortlink_host_is_douyin(self):
+        # v.douyin.com ends with .douyin.com, so _is_douyin_url returns True.
+        assert _is_douyin_url("https://v.douyin.com/iABCDEF/") is True
+
+    def test_bilibili_not_douyin(self):
+        assert _is_douyin_url("https://www.bilibili.com/video/BV1xx") is False
+
+
+# ---------------------------------------------------------------------------
+# Tests: _parse_douyin_share_page
+# ---------------------------------------------------------------------------
+
+class TestParseDouyinSharePage:
+    def test_parses_title_and_cover(self):
+        title, cover = _parse_douyin_share_page(IESDOUYIN_SHARE_PAGE_HTML)
+        assert title == _DOUYIN_SHARE_TITLE
+        assert cover == _DOUYIN_SHARE_COVER
+
+    def test_empty_html_returns_empty_tuple(self):
+        assert _parse_douyin_share_page("") == ("", "")
+
+    def test_no_router_data_returns_empty_tuple(self):
+        html = "<html><body><script>var x=1;</script></body></html>"
+        assert _parse_douyin_share_page(html) == ("", "")
+
+    def test_empty_item_list_returns_empty_tuple(self):
+        html = """\
+<html><body><script>
+window._ROUTER_DATA = {"loaderData": {"video_(id)/page": {"videoInfoRes": {"item_list": []}}}}
+</script></body></html>
+"""
+        assert _parse_douyin_share_page(html) == ("", "")
+
+    def test_fallback_loader_key(self):
+        """Any loaderData value dict with 'videoInfoRes' is accepted."""
+        html = f"""\
+<html><body><script>
+window._ROUTER_DATA = {{
+  "loaderData": {{
+    "some_other_key/page": {{
+      "videoInfoRes": {{
+        "item_list": [
+          {{
+            "desc": "fallback title",
+            "video": {{"cover": {{"url_list": ["{_DOUYIN_SHARE_COVER}"]}}}}
+          }}
+        ]
+      }}
+    }}
+  }}
+}}
+</script></body></html>
+"""
+        title, cover = _parse_douyin_share_page(html)
+        assert title == "fallback title"
+        assert cover == _DOUYIN_SHARE_COVER
+
+
+# ---------------------------------------------------------------------------
+# Tests: build_custom_topic — Douyin URL (via _resolve_douyin mock)
+# ---------------------------------------------------------------------------
+
+class TestBuildCustomTopicDouyin:
+    """Offline tests for the Douyin branch in build_custom_topic.
+
+    Strategy: monkeypatch both _read_url (returns SPA JS shell) and
+    _resolve_douyin (returns fixed title + cover) so the full function
+    exercises the Douyin branch without any network calls.
+    """
+
+    def test_douyin_video_url_has_video_true(self, monkeypatch):
+        monkeypatch.setattr("hotstream.image_scraper._read_url", _make_read_url_douyin())
+        monkeypatch.setattr(
+            "hotstream.image_scraper._resolve_douyin",
+            _make_resolve_douyin(_DOUYIN_SHARE_TITLE, _DOUYIN_SHARE_COVER),
+        )
+        topic = build_custom_topic(f"https://www.douyin.com/video/{_AWEME_ID}")
+        assert topic["has_video"] is True
+        assert topic["type"] == "video"
+
+    def test_douyin_video_url_title_nonempty(self, monkeypatch):
+        monkeypatch.setattr("hotstream.image_scraper._read_url", _make_read_url_douyin())
+        monkeypatch.setattr(
+            "hotstream.image_scraper._resolve_douyin",
+            _make_resolve_douyin(_DOUYIN_SHARE_TITLE, _DOUYIN_SHARE_COVER),
+        )
+        topic = build_custom_topic(f"https://www.douyin.com/video/{_AWEME_ID}")
+        assert topic["title"]
+        assert topic["title"] != f"https://www.douyin.com/video/{_AWEME_ID}"
+
+    def test_douyin_video_url_cover_nonempty(self, monkeypatch):
+        monkeypatch.setattr("hotstream.image_scraper._read_url", _make_read_url_douyin())
+        monkeypatch.setattr(
+            "hotstream.image_scraper._resolve_douyin",
+            _make_resolve_douyin(_DOUYIN_SHARE_TITLE, _DOUYIN_SHARE_COVER),
+        )
+        topic = build_custom_topic(f"https://www.douyin.com/video/{_AWEME_ID}")
+        assert topic["cover"] == _DOUYIN_SHARE_COVER
+
+    def test_douyin_short_link_has_video_true(self, monkeypatch):
+        """v.douyin.com short links are video-domain-matched → has_video True."""
+        monkeypatch.setattr("hotstream.image_scraper._read_url", _make_read_url_douyin())
+        monkeypatch.setattr(
+            "hotstream.image_scraper._resolve_douyin",
+            _make_resolve_douyin(_DOUYIN_SHARE_TITLE, _DOUYIN_SHARE_COVER),
+        )
+        topic = build_custom_topic("https://v.douyin.com/iXXXXXXXX/")
+        assert topic["has_video"] is True
+
+    def test_douyin_resolve_failure_no_raise(self, monkeypatch):
+        """When _resolve_douyin returns ("", ""), build_custom_topic must not raise.
+
+        has_video must still be True (URL-token match) even though title/cover
+        degraded (cover empty, title falls back to URL).
+        """
+        monkeypatch.setattr("hotstream.image_scraper._read_url", _make_read_url_douyin())
+        monkeypatch.setattr(
+            "hotstream.image_scraper._resolve_douyin",
+            _make_resolve_douyin("", ""),
+        )
+        url = f"https://www.douyin.com/video/{_AWEME_ID}"
+        topic = build_custom_topic(url)
+        assert topic["has_video"] is True
+        assert topic["cover"] == ""
+        # title is non-empty (may be "<title>" from shell page or the URL itself)
+        assert topic["title"]
+
+    def test_douyin_cover_failure_does_not_block_has_video(self, monkeypatch):
+        """Cover extraction failure must not flip has_video to False."""
+        monkeypatch.setattr("hotstream.image_scraper._read_url", _make_read_url_douyin())
+        monkeypatch.setattr(
+            "hotstream.image_scraper._resolve_douyin",
+            _make_resolve_douyin(_DOUYIN_SHARE_TITLE, ""),
+        )
+        topic = build_custom_topic(f"https://www.douyin.com/video/{_AWEME_ID}")
+        assert topic["has_video"] is True
+        assert topic["cover"] == ""
