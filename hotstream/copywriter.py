@@ -226,13 +226,26 @@ AI_ASSIST_CONDENSE_TEMPLATE = (
     "请在保持原意与风格不变的前提下，精炼缩短下面这段文案（用 Markdown）：\n\n{text}"
 )
 
+# 「补充」(supplement) 模式：在光标处插入一段新内容，不改动已有正文。
+# 与 expand/condense/rewrite 不同，supplement 不基于「选区」，而是基于
+# 「光标前文 / 光标后文」上下文，按用户要求生成一段可直接插入的文案。
+AI_ASSIST_SUPPLEMENT_TEMPLATE = (
+    "请在不改动已有内容的前提下，按以下要求补充一段可直接插入到光标处的文案"
+    "（与上下文风格一致，用 Markdown，只输出要补充的内容本身，不要重复已有内容）。\n"
+    "要求：{requirement}\n\n"
+    "【光标前文】\n{before_text}\n\n"
+    "【光标后文】\n{after_text}"
+)
+
 
 def build_ai_assist_messages(
     mode: str,
-    selected_text: str,
+    selected_text: str = "",
     requirement: str = "",
     global_prompt: str | None = None,
     image_analysis: str = "",
+    before_text: str = "",
+    after_text: str = "",
 ) -> list[dict[str, str]]:
     """Assemble the [system, user] messages for the 「AI 帮写」 (AI assist) feature.
 
@@ -246,6 +259,9 @@ def build_ai_assist_messages(
     - ``rewrite``  : rewrite per the user's ``requirement``; if ``image_analysis``
       is supplied (Qwen's read of the images inside the selection) it is appended
       as reference-only context.
+    - ``supplement``: generate a new passage to insert at the caret per the user's
+      ``requirement``, using ``before_text``/``after_text`` as surrounding context
+      (no selection involved, no images).
     """
     system_prompt = (global_prompt or DEFAULT_GLOBAL_PROMPT).strip() + MARKDOWN_OUTPUT_INSTRUCTION
     text = (selected_text or "").strip()
@@ -255,6 +271,12 @@ def build_ai_assist_messages(
         user_prompt = AI_ASSIST_EXPAND_TEMPLATE.format(text=text)
     elif normalized_mode == "condense":
         user_prompt = AI_ASSIST_CONDENSE_TEMPLATE.format(text=text)
+    elif normalized_mode == "supplement":
+        user_prompt = AI_ASSIST_SUPPLEMENT_TEMPLATE.format(
+            requirement=(requirement or "").strip(),
+            before_text=(before_text or "").strip(),
+            after_text=(after_text or "").strip(),
+        )
     elif normalized_mode == "rewrite":
         reference = (image_analysis or "").strip()
         reference_block = (
@@ -281,27 +303,37 @@ def build_ai_assist_messages(
 
 def generate_ai_assist(
     mode: str,
-    selected_text: str,
+    selected_text: str = "",
     requirement: str = "",
     global_prompt: str | None = None,
     image_analysis: str = "",
+    before_text: str = "",
+    after_text: str = "",
     api_key: str | None = None,
     model: str | None = None,
     api_url: str | None = None,
     timeout: int = 45,
 ) -> str:
-    """Run the 「AI 帮写」 expand/condense/rewrite operation via DeepSeek.
+    """Run the 「AI 帮写」 expand/condense/rewrite/supplement operation via DeepSeek.
 
     Returns the rewritten copy as plain text (Markdown). Reuses the same
     endpoint normalization / DeepSeek request shape / content extraction as
     :func:`generate_copy_with_deepseek` so the contract stays single-pathed.
+
+    ``supplement`` does not act on a selection — it produces a new passage to
+    insert at the caret, driven by ``requirement`` plus the surrounding
+    ``before_text`` / ``after_text`` context (no images).
     """
     load_project_env()
     resolved_api_key = (api_key or "").strip()
     if not resolved_api_key:
         raise RuntimeError("DeepSeek API Key 未填写")
 
-    if not (selected_text or "").strip():
+    normalized_mode = (mode or "").strip().lower()
+    if normalized_mode == "supplement":
+        if not (requirement or "").strip():
+            raise RuntimeError("请填写补充的具体要求")
+    elif not (selected_text or "").strip():
         raise RuntimeError("没有选中可供改写的文案")
 
     messages = build_ai_assist_messages(
@@ -310,6 +342,8 @@ def generate_ai_assist(
         requirement=requirement,
         global_prompt=global_prompt,
         image_analysis=image_analysis,
+        before_text=before_text,
+        after_text=after_text,
     )
 
     endpoint = _normalize_chat_endpoint(api_url)

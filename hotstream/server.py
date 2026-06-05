@@ -283,50 +283,86 @@ def build_video_analysis_response(raw_body: bytes) -> tuple[int, dict[str, str],
         return 502, headers, _json_bytes({"success": False, "error": str(exc), "analysis": {}, "images": []})
 
 
-def build_ai_assist_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
-    """Build the /api/ai-assist JSON response for the editor's 「AI 帮写」 feature.
+def stream_ai_assist_response(handler: "HotStreamRequestHandler", raw_body: bytes) -> None:
+    """Stream the /api/ai-assist response for the editor's 「AI 帮写」 feature.
 
-    Parses ``mode``/``text``/``requirement``/``images`` plus the injected
-    credentials (DeepSeek for the rewrite, Qwen for image analysis) and the
-    active soul (``global_prompt``). When ``mode == 'rewrite'`` and the selection
-    contains images, Qwen analyzes them first (analysis only) and the result is
-    threaded into DeepSeek as reference context. Returns ``{success, text}``.
+    Emits a sequence of NDJSON (application/x-ndjson) phase events so the editor
+    can drive a progress indicator instead of treating the call as a black box:
+
+    - ``{"phase":"error","success":false,"error":...}``  — validation/runtime error
+      (HTTP status stays 200; the error travels inside the event).
+    - ``{"phase":"analyzing_images"}``                    — Qwen image read started
+      (only for ``rewrite`` with images).
+    - ``{"phase":"image_failed"}``                        — image read failed, best
+      effort; generation continues on text alone.
+    - ``{"phase":"generating"}``                          — DeepSeek generation started.
+    - ``{"phase":"done","success":true,"text":<markdown>}`` — final result.
+
+    Parses ``mode``/``text``/``requirement``/``images`` (expand/condense/rewrite)
+    or ``requirement``/``before_text``/``after_text`` (supplement) plus the
+    injected credentials (DeepSeek for generation, Qwen for image analysis) and
+    the active soul (``global_prompt``). ``supplement`` does not touch images.
     """
-    headers = {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "no-store",
-    }
-    try:
-        payload = json.loads(raw_body.decode("utf-8") or "{}")
-    except json.JSONDecodeError:
-        return 400, headers, _json_bytes({"success": False, "error": "请求 JSON 格式不正确"})
+    # Send the streaming response headers up front; every event is written and
+    # flushed immediately so the browser's reader sees phases as they happen.
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
 
-    mode = str(payload.get("mode") or "").strip().lower()
-    text = str(payload.get("text") or "")
-    requirement = str(payload.get("requirement") or "")
-    images = [str(url).strip() for url in payload.get("images") or [] if str(url).strip()]
-    global_prompt = str(payload.get("global_prompt") or "").strip() or None
-
-    api_key = str(payload.get("api_key") or "").strip()
-    api_url = str(payload.get("api_url") or "").strip() or None
-    model = str(payload.get("model") or "").strip() or None
-
-    qwen_api_key = str(payload.get("qwen_api_key") or "").strip()
-    qwen_api_url = str(payload.get("qwen_api_url") or "").strip() or None
-    qwen_model = str(payload.get("qwen_model") or "").strip() or None
-
-    if mode not in {"expand", "condense", "rewrite"}:
-        return 400, headers, _json_bytes({"success": False, "error": "未知的 AI 帮写操作"})
-    if not text.strip():
-        return 400, headers, _json_bytes({"success": False, "error": "请先选中要处理的文案"})
-    if mode == "rewrite" and not requirement.strip():
-        return 400, headers, _json_bytes({"success": False, "error": "请填写改写的具体要求"})
-    if not api_key:
-        return 400, headers, _json_bytes({"success": False, "error": "请先在设置里配置文案生成 API Key"})
+    def emit(event: dict[str, Any]) -> None:
+        line = json.dumps(event, ensure_ascii=False) + "\n"
+        try:
+            handler.wfile.write(line.encode("utf-8"))
+            handler.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            # Client navigated away / cancelled the fetch; stop quietly.
+            raise
 
     try:
+        try:
+            payload = json.loads(raw_body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            emit({"phase": "error", "success": False, "error": "请求 JSON 格式不正确"})
+            return
+
+        mode = str(payload.get("mode") or "").strip().lower()
+        text = str(payload.get("text") or "")
+        requirement = str(payload.get("requirement") or "")
+        before_text = str(payload.get("before_text") or "")
+        after_text = str(payload.get("after_text") or "")
+        images = [str(url).strip() for url in payload.get("images") or [] if str(url).strip()]
+        global_prompt = str(payload.get("global_prompt") or "").strip() or None
+
+        api_key = str(payload.get("api_key") or "").strip()
+        api_url = str(payload.get("api_url") or "").strip() or None
+        model = str(payload.get("model") or "").strip() or None
+
+        qwen_api_key = str(payload.get("qwen_api_key") or "").strip()
+        qwen_api_url = str(payload.get("qwen_api_url") or "").strip() or None
+        qwen_model = str(payload.get("qwen_model") or "").strip() or None
+
+        if mode not in {"expand", "condense", "rewrite", "supplement"}:
+            emit({"phase": "error", "success": False, "error": "未知的 AI 帮写操作"})
+            return
+        if mode == "supplement":
+            if not requirement.strip():
+                emit({"phase": "error", "success": False, "error": "请填写补充的具体要求"})
+                return
+        else:
+            if not text.strip():
+                emit({"phase": "error", "success": False, "error": "请先选中要处理的文案"})
+                return
+            if mode == "rewrite" and not requirement.strip():
+                emit({"phase": "error", "success": False, "error": "请填写改写的具体要求"})
+                return
+        if not api_key:
+            emit({"phase": "error", "success": False, "error": "请先在设置里配置文案生成 API Key"})
+            return
+
         image_analysis = ""
         if mode == "rewrite" and images:
+            emit({"phase": "analyzing_images"})
             try:
                 image_analysis = analyze_images_with_qwen(
                     image_urls=images,
@@ -336,14 +372,17 @@ def build_ai_assist_response(raw_body: bytes) -> tuple[int, dict[str, str], byte
                 )
             except Exception:
                 # Image analysis is best-effort context; if Qwen fails (no key,
-                # network, etc.) fall back to rewriting on text alone.
+                # network, etc.) continue rewriting on text alone.
                 image_analysis = ""
+                emit({"phase": "image_failed"})
 
         kwargs: dict[str, Any] = {
             "mode": mode,
             "selected_text": text,
             "requirement": requirement,
             "image_analysis": image_analysis,
+            "before_text": before_text,
+            "after_text": after_text,
             "api_key": api_key,
         }
         if global_prompt is not None:
@@ -353,10 +392,16 @@ def build_ai_assist_response(raw_body: bytes) -> tuple[int, dict[str, str], byte
         if model is not None:
             kwargs["model"] = model
 
-        result_text = generate_ai_assist(**kwargs)
-        return 200, headers, _json_bytes({"success": True, "text": result_text})
-    except Exception as exc:
-        return 502, headers, _json_bytes({"success": False, "error": str(exc), "text": ""})
+        emit({"phase": "generating"})
+        try:
+            result_text = generate_ai_assist(**kwargs)
+        except Exception as exc:
+            emit({"phase": "error", "success": False, "error": str(exc)})
+            return
+        emit({"phase": "done", "success": True, "text": result_text})
+    except (BrokenPipeError, ConnectionResetError):
+        # Client closed the connection mid-stream; nothing more to do.
+        return
 
 
 def build_proxy_image_response(image_url: str, timeout: int = 12) -> tuple[int, dict[str, str], bytes]:
@@ -510,12 +555,16 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
             except ValueError:
                 content_length = 0
             raw_body = self.rfile.read(content_length) if content_length else b"{}"
+            # /api/ai-assist is special: it streams NDJSON phase events directly
+            # to the socket (its own send_response(200) + per-line flush), rather
+            # than going through the buffered (status, headers, body) path below.
+            if parsed.path == "/api/ai-assist":
+                stream_ai_assist_response(self, raw_body)
+                return
             if parsed.path == "/api/prompts":
                 status, headers, body = build_prompts_response(raw_body)
             elif parsed.path == "/api/analyze-video":
                 status, headers, body = build_video_analysis_response(raw_body)
-            elif parsed.path == "/api/ai-assist":
-                status, headers, body = build_ai_assist_response(raw_body)
             elif parsed.path == "/api/settings":
                 status, headers, body = build_settings_save_response(raw_body)
             elif parsed.path == "/api/drafts":

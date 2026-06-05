@@ -375,6 +375,94 @@
     .rt-ai-cancel { color: var(--text); background: var(--surface-2); }
     .rt-ai-cancel:hover { background: var(--surface-3); }
 
+    /* ── AI 帮写：持久选中高亮（即使浏览器原生选区消失也保持） ── */
+    /* 文字：用 .ai-sel 包裹的内联片段加柔和底色；图片 figure 加明显描边+角标 */
+    .preview-doc .ai-sel { background: var(--primary-soft); border-radius: 3px; box-shadow: 0 0 0 1px var(--primary) inset; }
+    .preview-doc figure.ai-sel { position: relative; outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 6px; }
+    .preview-doc figure.ai-sel::after {
+      content: "AI 作用对象";
+      position: absolute; top: 4px; left: 4px; z-index: 4;
+      padding: 2px 7px; font-size: 11px; font-weight: 700; line-height: 1.4;
+      color: var(--on-accent); background: var(--primary);
+      border-radius: 999px; box-shadow: var(--shadow-menu); pointer-events: none;
+    }
+
+    /* ── AI 帮写：进度指示（步骤条），出现在 AI 菜单与对比浮层里 ── */
+    .ai-progress { display: grid; gap: 8px; padding: 10px; }
+    .ai-progress[hidden] { display: none; }
+    .ai-progress-bar { position: relative; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+    .ai-progress-fill { position: absolute; inset: 0 100% 0 0; background: var(--primary); border-radius: 999px; transition: right var(--t-base); }
+    .ai-progress-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+    .ai-progress-step {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; font-size: 11px; font-weight: 700; line-height: 1.5;
+      color: var(--muted); background: var(--surface-2);
+      border: 1px solid var(--border); border-radius: 999px;
+    }
+    .ai-progress-step[data-state="active"] { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+    .ai-progress-step[data-state="done"] { color: var(--on-accent); border-color: var(--primary); background: var(--primary); }
+    .ai-progress-step[data-state="failed"] { color: var(--accent-warm); border-color: var(--accent-warm); }
+    .ai-progress-step[hidden] { display: none; }
+    .ai-progress-step .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    /* ── AI 帮写：「原 vs AI」对比预览浮层 ── */
+    .ai-compare { position: fixed; inset: 0; z-index: 9998; display: none; }
+    .ai-compare.show { display: block; }
+    .ai-compare-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, .42); backdrop-filter: blur(2px); }
+    .ai-compare-dialog {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: min(960px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+      display: flex; flex-direction: column;
+      background: var(--surface); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-menu); overflow: hidden;
+    }
+    .ai-compare-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+    .ai-compare-title { font-size: 15px; font-weight: 800; color: var(--text); display: inline-flex; align-items: center; gap: 8px; }
+    .ai-compare-badge { padding: 2px 9px; font-size: 11px; font-weight: 700; color: var(--primary); background: var(--primary-soft); border-radius: 999px; }
+    .ai-compare-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; overflow: auto; }
+    .ai-compare-col { padding: 14px 18px; min-width: 0; }
+    .ai-compare-col + .ai-compare-col { border-left: 1px solid var(--border); }
+    .ai-compare-col-head { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: none; margin-bottom: 8px; display: inline-flex; align-items: center; gap: 6px; }
+    .ai-compare-col-head .tag { width: 8px; height: 8px; border-radius: 50%; }
+    .ai-compare-col.orig .tag { background: var(--muted); }
+    .ai-compare-col.result .tag { background: var(--primary); }
+    .ai-compare-render { font-size: 14px; line-height: 1.7; color: var(--text); word-break: break-word; }
+    .ai-compare-render :where(h1, h2, h3) { margin: .4em 0 .3em; line-height: 1.35; }
+    .ai-compare-render p { margin: .5em 0; }
+    .ai-compare-render img { max-width: 100%; border-radius: 6px; display: block; margin: 8px 0; }
+    .ai-compare-render figure { margin: 8px 0; }
+    .ai-compare-render figure .fig-tools { display: none; }
+    .ai-compare-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--border); }
+    .ai-compare-hint { margin-right: auto; font-size: 12px; color: var(--muted); }
+    .ai-compare-btn { padding: 9px 18px; font-size: 14px; font-weight: 700; border: 1px solid var(--border); border-radius: var(--radius-md); }
+    .ai-compare-accept { color: var(--on-accent); background: var(--primary); border-color: var(--primary); }
+    .ai-compare-accept:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+    .ai-compare-discard { color: var(--text); background: var(--surface-2); }
+    .ai-compare-discard:hover { background: var(--surface-3); }
+    @media (max-width: 720px) {
+      .ai-compare-body { grid-template-columns: 1fr; }
+      .ai-compare-col + .ai-compare-col { border-left: none; border-top: 1px solid var(--border); }
+    }
+
+    /* ── AI 帮写：补充模式「模拟插入」标记（虚线框 + 特殊底色 + 待确认角标） ── */
+    .preview-doc .ai-supplement-preview {
+      position: relative;
+      border: 1px dashed var(--primary);
+      border-radius: 8px;
+      background: var(--primary-soft);
+      padding: 12px 12px 12px;
+      margin: 8px 0;
+    }
+    .preview-doc .ai-supplement-preview::before {
+      content: "AI 补充 · 待确认";
+      position: absolute; top: -10px; left: 12px;
+      padding: 1px 9px; font-size: 11px; font-weight: 700; line-height: 1.6;
+      color: var(--on-accent); background: var(--primary);
+      border-radius: 999px; box-shadow: var(--shadow-menu);
+    }
+    .preview-doc .ai-supplement-preview > :first-child { margin-top: 0; }
+    .preview-doc .ai-supplement-preview > :last-child { margin-bottom: 0; }
+
     .image-block-body { padding: 12px; }
     .image-block-body img {
       display: block;
@@ -679,7 +767,7 @@
           </div>
           <div class="rt-group">
             <button class="rt-btn" id="formatPainter" title="格式刷：先把光标放在带格式的文字上点此，再选中目标文字" aria-label="格式刷">
-              <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H6a2 2 0 0 0-2 2v.5"/><path d="M9 10v4a3 3 0 0 0 3 3v0a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a1 1 0 0 1 1-1h0"/></svg>
+              <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
             </button>
           </div>
           <div class="rt-group">
@@ -697,11 +785,27 @@
                 <button type="button" class="rt-ai-item" data-ai-mode="expand" role="menuitem">扩写<span class="rt-ai-sub">让所选文字更充实生动</span></button>
                 <button type="button" class="rt-ai-item" data-ai-mode="condense" role="menuitem">缩写<span class="rt-ai-sub">把所选文字精炼缩短</span></button>
                 <button type="button" class="rt-ai-item" data-ai-mode="rewrite" role="menuitem">改写…<span class="rt-ai-sub">按你的要求重写所选文字</span></button>
+                <button type="button" class="rt-ai-item" data-ai-mode="supplement" role="menuitem">补充…<span class="rt-ai-sub">把光标放好（不选文字），按要求补一段</span></button>
                 <div class="rt-ai-rewrite" id="aiRewriteBox" hidden>
                   <textarea id="aiRewriteReq" class="rt-ai-req" rows="2" placeholder="改写要求，例如：更口语化、突出性价比、加一句行动号召……"></textarea>
                   <div class="rt-ai-rewrite-actions">
                     <button type="button" class="rt-ai-go" id="aiRewriteGo">开始改写</button>
                     <button type="button" class="rt-ai-cancel" id="aiRewriteCancel">取消</button>
+                  </div>
+                </div>
+                <div class="rt-ai-rewrite" id="aiSupplementBox" hidden>
+                  <textarea id="aiSupplementReq" class="rt-ai-req" rows="2" placeholder="补充要求，例如：在此处补一段交通指引、补一句结尾互动……"></textarea>
+                  <div class="rt-ai-rewrite-actions">
+                    <button type="button" class="rt-ai-go" id="aiSupplementGo">生成补充</button>
+                    <button type="button" class="rt-ai-cancel" id="aiSupplementCancel">取消</button>
+                  </div>
+                </div>
+                <div class="ai-progress" id="aiProgress" hidden role="status" aria-live="polite">
+                  <div class="ai-progress-bar"><span class="ai-progress-fill" id="aiProgressFill"></span></div>
+                  <div class="ai-progress-steps" id="aiProgressSteps">
+                    <span class="ai-progress-step" data-step="analyzing_images" hidden><span class="dot"></span>分析图片…</span>
+                    <span class="ai-progress-step" data-step="generating"><span class="dot"></span>正在生成文案…</span>
+                    <span class="ai-progress-step" data-step="done"><span class="dot"></span>完成</span>
                   </div>
                 </div>
               </div>
@@ -735,6 +839,31 @@
   </main>
 
   <div class="toast" id="toast">已完成</div>
+
+  <!-- AI 帮写：「原 vs AI」对比预览浮层（接受才套用，放弃则不改动） -->
+  <div class="ai-compare" id="aiCompare" role="dialog" aria-modal="true" aria-labelledby="aiCompareTitle" hidden>
+    <div class="ai-compare-backdrop" id="aiCompareBackdrop"></div>
+    <div class="ai-compare-dialog">
+      <div class="ai-compare-head">
+        <span class="ai-compare-title" id="aiCompareTitle">对比预览<span class="ai-compare-badge" id="aiCompareBadge">AI 帮写</span></span>
+      </div>
+      <div class="ai-compare-body">
+        <div class="ai-compare-col orig">
+          <div class="ai-compare-col-head" id="aiCompareOrigHead"><span class="tag"></span>原内容</div>
+          <div class="ai-compare-render" id="aiCompareOrig"></div>
+        </div>
+        <div class="ai-compare-col result">
+          <div class="ai-compare-col-head" id="aiCompareResultHead"><span class="tag"></span>AI 结果</div>
+          <div class="ai-compare-render" id="aiCompareResult"></div>
+        </div>
+      </div>
+      <div class="ai-compare-foot">
+        <span class="ai-compare-hint" id="aiCompareHint">接受后才会套用到文档；放弃则保持原样。</span>
+        <button type="button" class="ai-compare-btn ai-compare-discard" id="aiCompareDiscard">放弃</button>
+        <button type="button" class="ai-compare-btn ai-compare-accept" id="aiCompareAccept">接受</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const IMPORT_KEY = 'hotstream.editorDraft';
@@ -1764,14 +1893,39 @@
     insertPageBreakBtn.addEventListener('mousedown', e => { e.preventDefault(); rememberSelection(); });
     insertPageBreakBtn.addEventListener('click', insertPageBreak);
 
-    // ── AI 帮写（扩写 / 缩写 / 改写）：作用于 previewDoc 当前非空选区 ──
+    // ── AI 帮写（扩写 / 缩写 / 改写 / 补充）：选区态作用于非空选区；光标态可补充 ──
     const aiAssistBtn = document.getElementById('aiAssistBtn');
     const aiAssistMenu = document.getElementById('aiAssistMenu');
     const aiRewriteBox = document.getElementById('aiRewriteBox');
     const aiRewriteReq = document.getElementById('aiRewriteReq');
     const aiRewriteGo = document.getElementById('aiRewriteGo');
     const aiRewriteCancel = document.getElementById('aiRewriteCancel');
+    const aiSupplementBox = document.getElementById('aiSupplementBox');
+    const aiSupplementReq = document.getElementById('aiSupplementReq');
+    const aiSupplementGo = document.getElementById('aiSupplementGo');
+    const aiSupplementCancel = document.getElementById('aiSupplementCancel');
+    const aiProgress = document.getElementById('aiProgress');
+    const aiProgressFill = document.getElementById('aiProgressFill');
+    const aiProgressSteps = document.getElementById('aiProgressSteps');
+    // 对比预览浮层
+    const aiCompare = document.getElementById('aiCompare');
+    const aiCompareBackdrop = document.getElementById('aiCompareBackdrop');
+    const aiCompareTitle = document.getElementById('aiCompareTitle');
+    const aiCompareBadge = document.getElementById('aiCompareBadge');
+    const aiCompareOrig = document.getElementById('aiCompareOrig');
+    const aiCompareOrigHead = document.getElementById('aiCompareOrigHead');
+    const aiCompareResult = document.getElementById('aiCompareResult');
+    const aiCompareResultHead = document.getElementById('aiCompareResultHead');
+    const aiCompareHint = document.getElementById('aiCompareHint');
+    const aiCompareAccept = document.getElementById('aiCompareAccept');
+    const aiCompareDiscard = document.getElementById('aiCompareDiscard');
     let aiBusy = false;
+    // 持久选中高亮记录：被包裹的文字 span 与被描边的 figure（供清除/回填用）
+    let aiHighlight = null; // { spans:[<span.ai-sel>], figures:[<figure.ai-sel>] }
+    let aiSuppressHighlightClear = false; // 高亮自身改动 DOM 时，避免 selectionchange 误清
+    let aiIgnoreSelChange = 0; // 铺设高亮后，DOM 变动会异步触发 selectionchange，吞掉若干次避免误清
+    let aiCompareState = null; // { mode, resultMd, requirement, captured } 待接受的预览态
+    let aiSupplementPreviewEl = null; // 补充模式：文档内「模拟插入」的虚线框容器
 
     // 把 /api/proxy-image?url=<原图> 还原成原始 url，便于 Qwen 直接读取外链；
     // data: 或本身就是外链则原样返回。
@@ -1785,7 +1939,111 @@
       return raw;
     }
 
-    // 当前 previewDoc 内是否存在非空选区（决定「AI 帮写」是否可用）。
+    // ── 持久选中高亮 ─────────────────────────────────────────────────────────
+    // 把当前（或记忆的）选区内的文字片段用 <span class="ai-sel"> 包裹、选区内的
+    // figure 加 .ai-sel 描边；记录到 aiHighlight，即使浏览器原生选区消失也保持显示。
+    function clearAiHighlight() {
+      if (!aiHighlight) return;
+      aiSuppressHighlightClear = true;
+      (aiHighlight.spans || []).forEach(span => {
+        if (!span.parentNode) return;
+        const parent = span.parentNode;
+        while (span.firstChild) parent.insertBefore(span.firstChild, span);
+        parent.removeChild(span);
+        parent.normalize && parent.normalize();
+      });
+      (aiHighlight.figures || []).forEach(fig => { if (fig) fig.classList.remove('ai-sel'); });
+      aiHighlight = null;
+      aiSuppressHighlightClear = false;
+    }
+
+    // 在给定 range 上铺设持久高亮。返回是否成功（有可高亮内容）。
+    function applyAiHighlight(range) {
+      clearAiHighlight();
+      if (!range || range.collapsed || !previewDoc.contains(range.commonAncestorContainer)) return false;
+      aiSuppressHighlightClear = true;
+      const spans = [];
+      const figures = [];
+      // 1) 收集与 range 相交的文字节点（避开 figure/img 内部）。
+      const walker = document.createTreeWalker(previewDoc, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+          if (!range.intersectsNode(node)) return NodeFilter.FILTER_REJECT;
+          // 跳过 figure（图片块）内部的文字（如替换/删除按钮文案）
+          let p = node.parentNode;
+          while (p && p !== previewDoc) { if (p.nodeName === 'FIGURE') return NodeFilter.FILTER_REJECT; p = p.parentNode; }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      const textNodes = [];
+      let tn;
+      while ((tn = walker.nextNode())) textNodes.push(tn);
+      // 2) 对每个相交文字节点，按 range 边界切出需要高亮的部分并包 span。
+      textNodes.forEach(node => {
+        let start = 0, end = node.nodeValue.length;
+        if (node === range.startContainer) start = range.startOffset;
+        if (node === range.endContainer) end = range.endOffset;
+        if (end <= start) return;
+        // 用 splitText 把待高亮片段切成独立文字节点：先切尾、再切头。
+        let target = node;
+        if (end < target.nodeValue.length) target.splitText(end);
+        if (start > 0) target = target.splitText(start);
+        if (target.nodeValue.length === 0) return;
+        const span = document.createElement('span');
+        span.className = 'ai-sel';
+        target.parentNode.insertBefore(span, target);
+        span.appendChild(target);
+        spans.push(span);
+      });
+      // 3) 选区内的 figure 加描边角标。
+      previewDoc.querySelectorAll('figure[data-block-id]').forEach(fig => {
+        if (range.intersectsNode(fig)) { fig.classList.add('ai-sel'); figures.push(fig); }
+      });
+      aiSuppressHighlightClear = false;
+      if (!spans.length && !figures.length) { aiHighlight = null; return false; }
+      aiHighlight = { spans, figures };
+      // 铺设高亮会折叠/改动原生选区，浏览器随后异步派发 selectionchange；
+      // 吞掉接下来的一次，避免「我们自己改 DOM」被当成「用户重新选择」而清除高亮。
+      aiIgnoreSelChange = 1;
+      return true;
+    }
+
+    // 从持久高亮反推「待处理选区」内容（替换的源就是高亮本身，与原生选区解耦）。
+    // 返回 {markdown, images[], firstNode, lastNode}；firstNode/lastNode 用于定位替换范围。
+    function captureFromHighlight() {
+      if (!aiHighlight) return null;
+      const ordered = [];
+      (aiHighlight.spans || []).forEach(n => ordered.push(n));
+      (aiHighlight.figures || []).forEach(n => ordered.push(n));
+      if (!ordered.length) return null;
+      // 按文档顺序排序，确定首/尾节点。
+      ordered.sort((a, b) => {
+        if (a === b) return 0;
+        const rel = a.compareDocumentPosition(b);
+        return (rel & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+      });
+      const firstNode = ordered[0];
+      const lastNode = ordered[ordered.length - 1];
+      // 文字 markdown：把高亮 span 的内联 HTML 串起来（剥掉 .ai-sel 包裹自身）。
+      const holder = document.createElement('div');
+      (aiHighlight.spans || []).forEach(span => {
+        const clone = span.cloneNode(true);
+        // 把 span 内容直接搬出，避免 .ai-sel 进入 markdown
+        while (clone.firstChild) holder.appendChild(clone.firstChild);
+      });
+      const markdown = inlineHtmlToMd(holder.innerHTML);
+      // 图片 url（去重、还原代理）
+      const images = [];
+      (aiHighlight.figures || []).forEach(fig => {
+        const img = fig.querySelector('img');
+        const src = img ? unproxyImageUrl(img.getAttribute('src') || '') : '';
+        if (src && images.indexOf(src) === -1) images.push(src);
+      });
+      const preservedFigures = (aiHighlight.figures || []).map(f => f.outerHTML);
+      return { markdown, images, firstNode, lastNode, preservedFigures };
+    }
+
+    // 当前 previewDoc 内是否存在非空选区（决定「AI 帮写」选区态）。
     function previewHasSelection() {
       const sel = window.getSelection();
       if (sel && sel.rangeCount && !sel.isCollapsed && previewDoc.contains(sel.anchorNode) && previewDoc.contains(sel.focusNode)) {
@@ -1795,51 +2053,94 @@
       if (savedSelection && !savedSelection.collapsed && previewDoc.contains(savedSelection.startContainer)) {
         return true;
       }
+      // 已铺设的持久高亮也算「有选区」（原生选区消失后仍可操作）。
+      if (aiHighlight) return true;
+      return false;
+    }
+
+    // 当前是否处于「光标态」（无选区，光标在 previewDoc 内）—— 补充仅在此态可用。
+    function previewHasCaret() {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && sel.isCollapsed && previewDoc.contains(sel.anchorNode)) return true;
+      if (savedSelection && savedSelection.collapsed && previewDoc.contains(savedSelection.startContainer)) return true;
       return false;
     }
 
     function refreshAiAvailability() {
-      const ok = previewHasSelection() && !aiBusy;
+      // AI 帮写按钮：有选区、有持久高亮、或有光标（补充态）任一即可用。
+      const ok = (previewHasSelection() || previewHasCaret()) && !aiBusy;
       aiAssistBtn.disabled = !ok;
-      if (!ok) closeAiMenu();
+      if (!ok && aiAssistMenu.hidden === false) closeAiMenu();
+    }
+
+    function syncAiMenuModes() {
+      // 选区态：扩/缩/改可用、补充禁用；光标态：仅补充可用。
+      const hasSel = previewHasSelection();
+      aiAssistMenu.querySelectorAll('.rt-ai-item').forEach(item => {
+        const m = item.dataset.aiMode;
+        const allowed = (m === 'supplement') ? !hasSel : hasSel;
+        item.disabled = !allowed || aiBusy;
+        item.setAttribute('aria-disabled', (!allowed).toString());
+      });
     }
 
     function closeAiMenu() {
       aiAssistMenu.hidden = true;
       aiAssistBtn.setAttribute('aria-expanded', 'false');
       aiRewriteBox.hidden = true;
+      aiSupplementBox.hidden = true;
+      if (!aiBusy) hideAiProgress();
     }
 
     function openAiMenu() {
       if (aiAssistBtn.disabled) return;
+      // 打开菜单即「锁定作用对象」：把当前选区铺成持久高亮（光标态则不铺）。
+      rememberSelection();
+      if (previewHasSelection()) {
+        const r = (savedSelection && !savedSelection.collapsed) ? savedSelection : (window.getSelection().rangeCount ? window.getSelection().getRangeAt(0) : null);
+        if (r && !r.collapsed) applyAiHighlight(r.cloneRange());
+      }
       aiAssistMenu.hidden = false;
       aiAssistBtn.setAttribute('aria-expanded', 'true');
       aiRewriteBox.hidden = true;
+      aiSupplementBox.hidden = true;
+      syncAiMenuModes();
     }
 
-    // 取「待处理选区」：返回 {range, markdown, images[]}。
-    // markdown 来自 选区 HTML → turndown；images 来自选区内 <img> 的（还原后的）src。
-    function captureAiSelection() {
-      restoreSelection();
-      const sel = window.getSelection();
-      if (!sel || !sel.rangeCount) return null;
-      const range = sel.getRangeAt(0);
-      if (range.collapsed || !previewDoc.contains(range.commonAncestorContainer)) return null;
-      const frag = range.cloneContents();
-      const holder = document.createElement('div');
-      holder.appendChild(frag);
-      // 收集选区内图片 url（去重、还原代理）
-      const images = [];
-      holder.querySelectorAll('img').forEach(img => {
-        const src = unproxyImageUrl(img.getAttribute('src') || '');
-        if (src && images.indexOf(src) === -1) images.push(src);
-      });
-      // 图片已单独收进 images 数组；从源里剔除 figure/img，避免图片 markdown
-      // 混进发给 DeepSeek 的文字（防代理图链泄漏、避免输出里冒出多余 ![](...)）。
-      holder.querySelectorAll('figure, img').forEach(n => n.remove());
-      // 选区 HTML → markdown（仅文字部分；图片在回填时单独保留处理）
-      const markdown = inlineHtmlToMd(holder.innerHTML);
-      return { range: range.cloneRange(), markdown, images };
+    // ── 进度条 ──────────────────────────────────────────────────────────────
+    function showAiProgress(withImages) {
+      aiProgress.hidden = false;
+      const imgStep = aiProgressSteps.querySelector('[data-step="analyzing_images"]');
+      if (imgStep) imgStep.hidden = !withImages; // 仅 rewrite+图片才出现「分析图片」步
+      aiProgressSteps.querySelectorAll('.ai-progress-step').forEach(s => s.setAttribute('data-state', 'pending'));
+      aiProgressFill.style.right = '100%';
+    }
+    function hideAiProgress() {
+      aiProgress.hidden = true;
+      aiProgressFill.style.right = '100%';
+    }
+    // 依据收到的 phase 切换步骤态与进度条。
+    function setAiPhase(phase) {
+      const order = ['analyzing_images', 'generating', 'done'];
+      const stepEl = name => aiProgressSteps.querySelector('[data-step="' + name + '"]');
+      if (phase === 'analyzing_images') {
+        stepEl('analyzing_images').setAttribute('data-state', 'active');
+        aiProgressFill.style.right = '66%';
+        showToast('正在分析图片…');
+      } else if (phase === 'image_failed') {
+        const s = stepEl('analyzing_images'); if (s) s.setAttribute('data-state', 'failed');
+      } else if (phase === 'generating') {
+        const ai = stepEl('analyzing_images');
+        if (ai && !ai.hidden && ai.getAttribute('data-state') !== 'failed') ai.setAttribute('data-state', 'done');
+        stepEl('generating').setAttribute('data-state', 'active');
+        aiProgressFill.style.right = '33%';
+        showToast('正在生成文案…');
+      } else if (phase === 'done') {
+        const g = stepEl('generating'); if (g) g.setAttribute('data-state', 'done');
+        stepEl('done').setAttribute('data-state', 'done');
+        aiProgressFill.style.right = '0%';
+        showToast('生成完成');
+      }
     }
 
     // 把 AI 返回的 markdown 渲染成「顶层块元素」节点数组（与 renderPreview 一致的块模型）。
@@ -1853,112 +2154,333 @@
     function setAiBusy(on) {
       aiBusy = on;
       aiAssistBtn.classList.toggle('busy', on);
-      aiAssistBtn.disabled = on || !previewHasSelection();
-      [aiRewriteGo, aiRewriteCancel].forEach(b => { if (b) b.disabled = on; });
+      aiAssistBtn.disabled = on || !(previewHasSelection() || previewHasCaret());
+      [aiRewriteGo, aiRewriteCancel, aiSupplementGo, aiSupplementCancel].forEach(b => { if (b) b.disabled = on; });
       aiAssistMenu.querySelectorAll('.rt-ai-item').forEach(b => { b.disabled = on; });
+      [aiCompareAccept, aiCompareDiscard].forEach(b => { if (b) b.disabled = on; });
     }
 
+    // ── 流式读取：fetch → resp.body.getReader() → 按 \n 拆 NDJSON 解析事件 ──
+    // onEvent(evt) 处理每个事件；返回最终 done 事件（含 text）或抛错。
+    async function streamAiAssist(payload, onEvent) {
+      const res = await fetch('/api/ai-assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.body) {
+        // 退化：无流式 body，整体读 JSON（容错）。
+        const data = await res.json().catch(() => null);
+        if (data) onEvent(data.success ? { phase: 'done', success: true, text: data.text } : { phase: 'error', error: data.error });
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buf = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, idx).trim();
+          buf = buf.slice(idx + 1);
+          if (!line) continue;
+          let evt = null;
+          try { evt = JSON.parse(line); } catch (e) { continue; }
+          if (evt) onEvent(evt);
+        }
+      }
+      const tail = buf.trim();
+      if (tail) { try { onEvent(JSON.parse(tail)); } catch (e) {} }
+    }
+
+    // ── 统一发起：扩/缩/改用高亮源，补充用光标前后文 ──
     async function runAiAssist(mode, requirement) {
       if (aiBusy) return;
-      const captured = captureAiSelection();
-      if (!captured || !captured.markdown.trim()) {
-        showToast('请先选中要处理的文案');
-        closeAiMenu();
-        return;
-      }
-      setAiBusy(true);
-      showToast('AI 生成中…');
-      const payload = { mode, text: captured.markdown };
-      if (mode === 'rewrite') {
+      let captured = null;
+      let withImages = false;
+      const payload = { mode };
+
+      if (mode === 'supplement') {
+        const ctx = captureCaretContext();
+        if (!ctx) { showToast('请先把光标放在文档中要补充的位置'); closeAiMenu(); return; }
+        captured = ctx;
         payload.requirement = requirement || '';
-        if (captured.images.length) payload.images = captured.images;
+        payload.before_text = ctx.beforeText;
+        payload.after_text = ctx.afterText;
+      } else {
+        // 优先用持久高亮作为作用对象；没有则从当前选区铺一次。
+        if (!aiHighlight) {
+          rememberSelection();
+          const r = (savedSelection && !savedSelection.collapsed) ? savedSelection : null;
+          if (r) applyAiHighlight(r.cloneRange());
+        }
+        captured = captureFromHighlight();
+        if (!captured || !captured.markdown.trim()) {
+          showToast('请先选中要处理的文案');
+          closeAiMenu();
+          return;
+        }
+        payload.text = captured.markdown;
+        if (mode === 'rewrite') {
+          payload.requirement = requirement || '';
+          if (captured.images.length) { payload.images = captured.images; withImages = true; }
+        }
       }
-      let data = null;
+
+      setAiBusy(true);
+      aiRewriteBox.hidden = true;
+      aiSupplementBox.hidden = true;
+      showAiProgress(withImages);
+
+      let resultMd = '';
+      let streamError = '';
       try {
-        const res = await fetch('/api/ai-assist', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+        await streamAiAssist(payload, evt => {
+          if (!evt || !evt.phase) return;
+          if (evt.phase === 'error') { streamError = evt.error || 'AI 生成失败，请稍后再试'; return; }
+          setAiPhase(evt.phase);
+          if (evt.phase === 'done') resultMd = String(evt.text || '').trim();
         });
-        data = await res.json().catch(() => null);
-        if (!res.ok || !data || !data.success) {
-          throw new Error((data && data.error) || 'AI 生成失败，请稍后再试');
-        }
       } catch (err) {
-        setAiBusy(false);
-        showToast('AI 生成失败：' + (err && err.message ? err.message : '请稍后再试'));
-        return;
+        streamError = (err && err.message) ? err.message : '请稍后再试';
       }
 
-      const resultMd = String(data.text || '').trim();
-      if (!resultMd) {
-        setAiBusy(false);
-        showToast('AI 没有返回内容');
-        return;
-      }
+      setAiBusy(false);
+      if (streamError) { hideAiProgress(); showToast('AI 生成失败：' + streamError); return; }
+      if (!resultMd) { hideAiProgress(); showToast('AI 没有返回内容'); return; }
 
-      // ── 用返回 markdown 替换选区「文字部分」，并保留选区内原有图片 figure ──
+      // 不再自动套用：弹出「原 vs AI」对比预览，接受后才执行替换/插入。
+      openAiCompare(mode, requirement, resultMd, captured);
+    }
+
+    // ── 补充模式：取光标前后文（当前块及相邻块文本，各截断到 ~1200 字） ──
+    const SUPPLEMENT_CTX_LIMIT = 1200;
+    function captureCaretContext() {
+      restoreSelection();
+      const sel = window.getSelection();
+      let range = (sel && sel.rangeCount) ? sel.getRangeAt(0) : (savedSelection || null);
+      if (!range || !range.collapsed || !previewDoc.contains(range.startContainer)) return null;
+      // 定位光标所在的顶层块。
+      let blockEl = range.startContainer;
+      if (blockEl.nodeType === 3) blockEl = blockEl.parentNode;
+      while (blockEl && blockEl.parentNode !== previewDoc && blockEl !== previewDoc) blockEl = blockEl.parentNode;
+      if (!blockEl || blockEl === previewDoc) {
+        // 光标直接落在 previewDoc 上：取首个块兜底。
+        blockEl = previewDoc.firstElementChild;
+      }
+      // 块内：以光标为界切出块内前/后文。
+      const inBlockBefore = document.createRange();
+      inBlockBefore.selectNodeContents(blockEl || previewDoc);
+      try { inBlockBefore.setEnd(range.startContainer, range.startOffset); } catch (e) {}
+      const inBlockAfter = document.createRange();
+      inBlockAfter.selectNodeContents(blockEl || previewDoc);
+      try { inBlockAfter.setStart(range.startContainer, range.startOffset); } catch (e) {}
+      const textOf = el => (el && el.textContent ? el.textContent.replace(/\s+/g, ' ').trim() : '');
+      // 相邻块文本（各取一块，丰富上下文）。
+      const prevBlock = blockEl ? blockEl.previousElementSibling : null;
+      const nextBlock = blockEl ? blockEl.nextElementSibling : null;
+      let beforeText = (textOf(prevBlock) + '\n' + (inBlockBefore.toString() || '')).trim();
+      let afterText = ((inBlockAfter.toString() || '') + '\n' + textOf(nextBlock)).trim();
+      if (beforeText.length > SUPPLEMENT_CTX_LIMIT) beforeText = beforeText.slice(-SUPPLEMENT_CTX_LIMIT);
+      if (afterText.length > SUPPLEMENT_CTX_LIMIT) afterText = afterText.slice(0, SUPPLEMENT_CTX_LIMIT);
+      return { caretRange: range.cloneRange(), blockEl, beforeText, afterText, supplement: true };
+    }
+
+    // ── 对比预览浮层 ─────────────────────────────────────────────────────────
+    function openAiCompare(mode, requirement, resultMd, captured) {
+      aiCompareState = { mode, requirement, resultMd, captured };
+      const isSupp = mode === 'supplement';
+      aiCompareBadge.textContent = isSupp ? 'AI 补充' : (mode === 'expand' ? 'AI 扩写' : (mode === 'condense' ? 'AI 缩写' : 'AI 改写'));
+      // 左/上：原内容。补充态显示「光标处上下文」，其它态显示选区文字+图片原样渲染。
+      aiCompareOrig.innerHTML = '';
+      if (isSupp) {
+        aiCompareOrigHead.innerHTML = '<span class="tag"></span>光标处（上下文）';
+        const wrap = document.createElement('div');
+        wrap.className = 'ai-compare-render';
+        wrap.innerHTML = (captured.beforeText ? escapeHtml(captured.beforeText).replace(/\n/g, '<br>') : '<em style="color:var(--muted)">（前文为空）</em>')
+          + '<div style="margin:8px 0;color:var(--primary);font-weight:700">↧ 在此处插入 ↧</div>'
+          + (captured.afterText ? escapeHtml(captured.afterText).replace(/\n/g, '<br>') : '<em style="color:var(--muted)">（后文为空）</em>');
+        aiCompareOrig.appendChild(wrap);
+      } else {
+        aiCompareOrigHead.innerHTML = '<span class="tag"></span>原内容';
+        // 选区文字（高亮 span 原样内容）+ 图片 figure 原样渲染。
+        const holder = document.createElement('div');
+        (aiHighlight && aiHighlight.spans || []).forEach(span => {
+          const p = document.createElement('span');
+          p.innerHTML = span.innerHTML;
+          holder.appendChild(p);
+        });
+        if (captured.preservedFigures && captured.preservedFigures.length) {
+          holder.innerHTML += captured.preservedFigures.join('');
+        }
+        aiCompareOrig.innerHTML = holder.innerHTML || '<em style="color:var(--muted)">（无文字内容）</em>';
+      }
+      // 右/下：AI 结果渲染（补充态额外标注「将插入的内容」）。
+      aiCompareResultHead.innerHTML = '<span class="tag"></span>' + (isSupp ? 'AI 结果（将插入此内容）' : 'AI 结果');
+      const resultNodes = aiMarkdownToNodes(resultMd);
+      aiCompareResult.innerHTML = '';
+      resultNodes.forEach(n => aiCompareResult.appendChild(n.cloneNode(true)));
+      if (!isSupp && captured.preservedFigures && captured.preservedFigures.length) {
+        const note = document.createElement('div');
+        note.style.cssText = 'margin-top:8px;font-size:12px;color:var(--muted)';
+        note.textContent = '原选区中的图片将被保留并接在文字之后。';
+        aiCompareResult.appendChild(note);
+      }
+      aiCompareHint.textContent = isSupp
+        ? '接受后去掉「待确认」标记成为正文；放弃则移除该段。'
+        : '接受后才会替换所选文字（图片保留）；放弃则保持原样。';
+      // 补充模式：在光标处放入「高亮模拟插入」块（虚线框 + 特殊底色 + 待确认角标）。
+      if (isSupp) buildSupplementPreviewEl(resultMd, captured);
+      aiCompare.hidden = false;
+      aiCompare.classList.add('show');
+      setTimeout(() => aiCompareAccept.focus(), 0);
+    }
+
+    // 在光标所在块之后插入一个 .ai-supplement-preview 容器作为「模拟插入」预览。
+    // 接受 → 去掉容器、内容留在原位；放弃 → 整块移除。
+    function buildSupplementPreviewEl(resultMd, captured) {
+      removeSupplementPreviewEl();
+      if (previewDoc.getAttribute('data-empty') === '1') previewDoc.removeAttribute('data-empty');
+      const box = document.createElement('div');
+      box.className = 'ai-supplement-preview';
+      box.setAttribute('contenteditable', 'false');
+      box.setAttribute('data-ai-supplement-preview', '1');
+      aiMarkdownToNodes(resultMd).forEach(n => box.appendChild(n));
+      const blockEl = captured.blockEl;
+      aiSuppressHighlightClear = true;
+      if (blockEl && blockEl.parentNode === previewDoc) blockEl.after(box);
+      else previewDoc.appendChild(box);
+      aiSuppressHighlightClear = false;
+      aiSupplementPreviewEl = box;
+      box.scrollIntoView({ block: 'nearest' });
+    }
+
+    function removeSupplementPreviewEl() {
+      if (aiSupplementPreviewEl && aiSupplementPreviewEl.parentNode) {
+        aiSuppressHighlightClear = true;
+        aiSupplementPreviewEl.parentNode.removeChild(aiSupplementPreviewEl);
+        aiSuppressHighlightClear = false;
+      }
+      aiSupplementPreviewEl = null;
+    }
+
+    function closeAiCompare() {
+      aiCompare.classList.remove('show');
+      aiCompare.hidden = true;
+      aiCompareState = null;
+      hideAiProgress();
+    }
+
+    // 接受预览：执行替换（扩/缩/改）或插入（补充）。
+    function acceptAiCompare() {
+      if (!aiCompareState) { closeAiCompare(); return; }
+      const { mode, resultMd, captured } = aiCompareState;
       try {
-        if (previewDoc.getAttribute('data-empty') === '1') previewDoc.removeAttribute('data-empty');
-        restoreSelection();
-        const sel = window.getSelection();
-        let range = captured.range;
-        if (sel && sel.rangeCount && previewDoc.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-          range = sel.getRangeAt(0);
-        }
-        // 1) 先把选区内原有的图片 figure 抽出来保留（克隆 outerHTML，避免删除时丢失）
-        const preserved = [];
-        const selFrag = range.cloneContents();
-        const figProbe = document.createElement('div');
-        figProbe.appendChild(selFrag);
-        figProbe.querySelectorAll('figure').forEach(f => preserved.push(f.outerHTML));
-
-        // 2) 删除选区内容，得到一个折叠的插入点
-        range.deleteContents();
-
-        // 3) 构造替换内容：先文字块，后保留的图片 figure
-        const nodes = aiMarkdownToNodes(resultMd);
-        if (preserved.length) {
-          const figWrap = document.createElement('div');
-          figWrap.innerHTML = preserved.join('');
-          Array.from(figWrap.querySelectorAll('figure')).forEach(f => {
-            // 重新生成 block-id，避免与文档其它块的 id 冲突
-            f.dataset.blockId = makeId('image');
-            nodes.push(f);
-          });
-        }
-
-        // 4) 在插入点插入（保持顺序）；记录尾节点用于落点
-        const insertFrag = document.createDocumentFragment();
-        nodes.forEach(n => insertFrag.appendChild(n));
-        const lastNode = insertFrag.lastChild;
-        range.insertNode(insertFrag);
-
-        // 5) 把光标落到插入内容之后
-        if (lastNode) {
-          const after = document.createRange();
-          after.setStartAfter(lastNode);
-          after.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(after);
-          savedSelection = after.cloneRange();
-        }
-
-        // 6) 重新绑定图片工具、回写块模型、进历史、保存
-        wireFigureTools();
-        syncBlocksFromDom();
-        if (typeof pushHistoryNow === 'function') pushHistoryNow();
-        saveDraft({ silent: true });
-        const label = mode === 'expand' ? '已扩写' : (mode === 'condense' ? '已缩写' : '已改写');
-        showToast(label + '所选文案' + (preserved.length ? '（图片已保留）' : ''));
+        if (mode === 'supplement') applySupplement(resultMd, captured);
+        else applyRewriteReplacement(mode, resultMd, captured);
       } catch (err) {
-        showToast('替换失败：' + (err && err.message ? err.message : '请重试'));
+        showToast('套用失败：' + (err && err.message ? err.message : '请重试'));
       } finally {
-        setAiBusy(false);
+        clearAiHighlight();
+        closeAiCompare();
         closeAiMenu();
         aiRewriteReq.value = '';
+        aiSupplementReq.value = '';
         refreshAiAvailability();
       }
+    }
+
+    // 放弃预览：不改动文档；补充态移除模拟插入块；保留高亮直到用户重新选择。
+    function discardAiCompare() {
+      removeSupplementPreviewEl();
+      closeAiCompare();
+      showToast('已放弃本次 AI 结果');
+    }
+
+    // 扩/缩/改：用 AI markdown 替换高亮文字，保留高亮内的图片 figure。
+    function applyRewriteReplacement(mode, resultMd, captured) {
+      if (!captured || !captured.firstNode || !captured.lastNode) throw new Error('找不到要替换的内容');
+      if (previewDoc.getAttribute('data-empty') === '1') previewDoc.removeAttribute('data-empty');
+      aiSuppressHighlightClear = true;
+      // 构造覆盖整个高亮范围的 range（首节点前 → 尾节点后）。
+      const range = document.createRange();
+      range.setStartBefore(captured.firstNode);
+      range.setEndAfter(captured.lastNode);
+      // 保留的图片 figure（克隆 outerHTML，删除前已记在 captured.preservedFigures）。
+      const preserved = captured.preservedFigures || [];
+      range.deleteContents();
+      const nodes = aiMarkdownToNodes(resultMd);
+      if (preserved.length) {
+        const figWrap = document.createElement('div');
+        figWrap.innerHTML = preserved.join('');
+        Array.from(figWrap.querySelectorAll('figure')).forEach(f => {
+          f.classList.remove('ai-sel'); // 去掉高亮描边
+          f.dataset.blockId = makeId('image'); // 重新生成 id 防冲突
+          nodes.push(f);
+        });
+      }
+      const insertFrag = document.createDocumentFragment();
+      nodes.forEach(n => insertFrag.appendChild(n));
+      const lastNode = insertFrag.lastChild;
+      range.insertNode(insertFrag);
+      // 光标落到插入内容之后。
+      const sel = window.getSelection();
+      if (lastNode) {
+        const after = document.createRange();
+        after.setStartAfter(lastNode);
+        after.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(after);
+        savedSelection = after.cloneRange();
+      }
+      aiSuppressHighlightClear = false;
+      wireFigureTools();
+      syncBlocksFromDom();
+      if (typeof pushHistoryNow === 'function') pushHistoryNow();
+      saveDraft({ silent: true });
+      const label = mode === 'expand' ? '已扩写' : (mode === 'condense' ? '已缩写' : '已改写');
+      showToast(label + '所选文案' + (preserved.length ? '（图片已保留）' : ''));
+    }
+
+    // 补充：把「模拟插入」块去掉虚线框/标记，内容原位成为正文（接受时）。
+    function applySupplement(resultMd, captured) {
+      if (previewDoc.getAttribute('data-empty') === '1') previewDoc.removeAttribute('data-empty');
+      aiSuppressHighlightClear = true;
+      let lastNode = null;
+      if (aiSupplementPreviewEl && aiSupplementPreviewEl.parentNode) {
+        // 把容器内的块节点搬出到容器位置，再移除空容器（去标记成正文）。
+        const box = aiSupplementPreviewEl;
+        const parent = box.parentNode;
+        while (box.firstChild) { lastNode = box.firstChild; parent.insertBefore(box.firstChild, box); }
+        parent.removeChild(box);
+        aiSupplementPreviewEl = null;
+      } else {
+        // 兜底：预览块不在了，直接在光标块后插入。
+        const nodes = aiMarkdownToNodes(resultMd);
+        const frag = document.createDocumentFragment();
+        nodes.forEach(n => { frag.appendChild(n); });
+        lastNode = frag.lastChild;
+        const blockEl = captured.blockEl;
+        if (blockEl && blockEl.parentNode === previewDoc) blockEl.after(frag);
+        else previewDoc.appendChild(frag);
+      }
+      aiSuppressHighlightClear = false;
+      const sel = window.getSelection();
+      if (lastNode) {
+        const after = document.createRange();
+        after.setStartAfter(lastNode);
+        after.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(after);
+        savedSelection = after.cloneRange();
+      }
+      wireFigureTools();
+      syncBlocksFromDom();
+      if (typeof pushHistoryNow === 'function') pushHistoryNow();
+      saveDraft({ silent: true });
+      showToast('已在光标处补充内容');
     }
 
     // 入口按钮：mousedown 时记忆当前选区（避免点击工具栏丢失），click 开关菜单
@@ -1968,15 +2490,23 @@
     });
     // 菜单内按钮也要在 mousedown 时保住选区
     aiAssistMenu.addEventListener('mousedown', e => {
-      // textarea 需要正常获取焦点编辑；其余按钮阻止默认以保留 previewDoc 选区
-      if (e.target !== aiRewriteReq) { e.preventDefault(); rememberSelection(); }
+      // textarea 需要正常获取焦点编辑；其余按钮阻止默认以保留 previewDoc 选区/高亮
+      if (e.target !== aiRewriteReq && e.target !== aiSupplementReq) { e.preventDefault(); rememberSelection(); }
     });
     aiAssistMenu.querySelectorAll('.rt-ai-item').forEach(item => {
       item.addEventListener('click', () => {
+        if (item.disabled) return;
         const mode = item.dataset.aiMode;
         if (mode === 'rewrite') {
           aiRewriteBox.hidden = false;
+          aiSupplementBox.hidden = true;
           setTimeout(() => aiRewriteReq.focus(), 0);
+          return;
+        }
+        if (mode === 'supplement') {
+          aiSupplementBox.hidden = false;
+          aiRewriteBox.hidden = true;
+          setTimeout(() => aiSupplementReq.focus(), 0);
           return;
         }
         runAiAssist(mode, '');
@@ -1988,17 +2518,54 @@
       runAiAssist('rewrite', req);
     });
     aiRewriteCancel.addEventListener('click', () => { aiRewriteBox.hidden = true; aiRewriteReq.value = ''; });
+    aiSupplementGo.addEventListener('click', () => {
+      const req = aiSupplementReq.value.trim();
+      if (!req) { showToast('请填写补充要求'); aiSupplementReq.focus(); return; }
+      runAiAssist('supplement', req);
+    });
+    aiSupplementCancel.addEventListener('click', () => { aiSupplementBox.hidden = true; aiSupplementReq.value = ''; });
+    // 对比浮层按钮
+    aiCompareAccept.addEventListener('click', acceptAiCompare);
+    aiCompareDiscard.addEventListener('click', discardAiCompare);
+    aiCompareBackdrop.addEventListener('click', discardAiCompare);
     // 点击菜单外区域关闭
     document.addEventListener('mousedown', e => {
       if (!aiAssistMenu.hidden && !aiAssistMenu.contains(e.target) && e.target !== aiAssistBtn && !aiAssistBtn.contains(e.target)) {
         closeAiMenu();
       }
     });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !aiAssistMenu.hidden) closeAiMenu(); });
-    // 选区变化时刷新可用性（依赖已有的 selection 事件）
-    previewDoc.addEventListener('keyup', refreshAiAvailability);
-    previewDoc.addEventListener('mouseup', refreshAiAvailability);
-    document.addEventListener('selectionchange', () => { if (document.activeElement === previewDoc) refreshAiAvailability(); });
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      if (aiCompare.classList.contains('show')) { discardAiCompare(); return; }
+      if (!aiAssistMenu.hidden) closeAiMenu();
+    });
+    // 选区变化时刷新可用性与菜单模式；用户在 previewDoc 内重新选择时清除旧高亮。
+    function onPreviewSelectionMaybeClearHighlight() {
+      if (aiSuppressHighlightClear || aiBusy) return;
+      if (aiCompare.classList.contains('show')) return; // 预览期间保持高亮
+      if (aiIgnoreSelChange > 0) { aiIgnoreSelChange--; return; } // 吞掉铺设高亮引发的 selectionchange
+      if (!aiHighlight) return;
+      // 若当前选区/光标仍完全落在高亮 span 内（我们改 DOM 的余波），不清除。
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        let node = sel.anchorNode;
+        while (node && node !== previewDoc) {
+          if (node.nodeType === 1 && node.classList && node.classList.contains('ai-sel')) return;
+          node = node.parentNode;
+        }
+      }
+      // 用户做出了新的选择/移动光标到高亮之外 → 视为重新选择，清除旧的持久高亮。
+      clearAiHighlight();
+    }
+    previewDoc.addEventListener('keyup', () => { refreshAiAvailability(); });
+    previewDoc.addEventListener('mouseup', () => { refreshAiAvailability(); });
+    document.addEventListener('selectionchange', () => {
+      if (document.activeElement === previewDoc) {
+        onPreviewSelectionMaybeClearHighlight();
+        refreshAiAvailability();
+        if (!aiAssistMenu.hidden) syncAiMenuModes();
+      }
+    });
 
     const fontNameSelect = document.getElementById('fontName');
     fontNameSelect.addEventListener('mousedown', rememberSelection);
