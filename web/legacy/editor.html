@@ -137,7 +137,7 @@
 
     .workspace {
       display: grid;
-      grid-template-columns: minmax(360px, .7fr) minmax(440px, 1.25fr) minmax(280px, .6fr);
+      grid-template-columns: minmax(560px, 1fr) minmax(300px, .5fr);
       gap: 18px;
       align-items: stretch;
     }
@@ -199,7 +199,6 @@
       box-shadow: 0 0 0 3px var(--primary-ring);
     }
 
-    .editor-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
     .meta-line { color: var(--muted); font-size: 12px; line-height: 1.65; }
 
     /* ── WYSIWYG 富文本工具栏（作用于可编辑预览） ── */
@@ -244,17 +243,80 @@
       font-size: 13px;
       background: var(--surface);
     }
-    .rt-color {
-      width: 34px;
-      height: 32px;
-      padding: 2px;
+    /* ── 编辑面板内的标题 + 头部控件 ── */
+    .editor-head { display: grid; gap: 10px; padding: 14px 14px 0; }
+    .editor-head .editor-title-input {
+      width: 100%;
+      padding: 11px 13px;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      background: var(--surface);
-      cursor: pointer;
+      background: var(--surface-2);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 15px;
     }
-    .rt-color::-webkit-color-swatch-wrapper { padding: 0; }
-    .rt-color::-webkit-color-swatch { border: 0; border-radius: 3px; }
+    .editor-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .editor-head-actions .spacer { flex: 1 1 auto; }
+    .editor-head-actions .meta { color: var(--muted); font-size: 12px; }
+
+    /* ── 颜色一键 + 最近预设 ── */
+    .rt-color-wrap { display: inline-flex; align-items: center; gap: 4px; }
+    .rt-color-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 32px;
+      height: 32px;
+      padding: 0 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text);
+      background: var(--surface);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .rt-color-main:hover { border-color: var(--border-strong); background: var(--surface-3); }
+    .rt-color-main .swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      border: 1px solid rgba(0,0,0,.2);
+      background: #e11d48;
+      flex: none;
+    }
+    .rt-color-presets { display: inline-flex; align-items: center; gap: 3px; }
+    .rt-color-preset {
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      background: transparent;
+      transition: transform var(--t-fast), border-color var(--t-fast);
+    }
+    .rt-color-preset:hover { transform: scale(1.12); border-color: var(--border-strong); }
+    .rt-color-add {
+      position: relative;
+      width: 24px;
+      height: 32px;
+      overflow: hidden;
+    }
+    .rt-color-add input[type="color"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+      padding: 0;
+      border: 0;
+    }
+
+    /* 格式刷激活态 */
+    .rt-btn.painting[data-active="1"],
+    .rt-btn#formatPainter[data-active="1"] { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+    .preview-doc.painting { cursor: crosshair; }
 
     .image-block-body { padding: 12px; }
     .image-block-body img {
@@ -299,6 +361,8 @@
 
     /* 编辑态修饰：图片块的删除/替换按钮（导出时移除） */
     .preview-doc figure { position: relative; }
+    .preview-doc figure[draggable="true"] { cursor: grab; }
+    .preview-doc figure.dragging { opacity: .45; }
     .fig-tools {
       position: absolute;
       top: 8px;
@@ -320,6 +384,41 @@
       box-shadow: 0 1px 3px rgba(0,0,0,.2);
     }
     .fig-tools button.del { color: #c62f46; }
+
+    /* ── 分页符块：导出长图时此处切成下一张图 ── */
+    .preview-doc hr.pagebreak {
+      position: relative;
+      display: block;
+      width: 100%;
+      height: 0;
+      margin: 26px 0;
+      padding: 0;
+      border: 0;
+      border-top: 2px dashed #c9b48a;
+      background: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .preview-doc hr.pagebreak::after {
+      content: '✂ 分页符（导出分图）';
+      position: absolute;
+      left: 50%;
+      top: 0;
+      transform: translate(-50%, -50%);
+      padding: 2px 12px;
+      border: 1px solid #e2d4b0;
+      border-radius: 999px;
+      background: #fbf6ea;
+      color: #9a7b32;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      letter-spacing: .02em;
+    }
+    /* 选中态：用顶层块原生选区高亮提示可删除 */
+    .preview-doc hr.pagebreak.selected { border-top-color: #c62f46; }
+    .preview-doc hr.pagebreak.selected::after { border-color: #c62f46; color: #c62f46; background: #fdeaec; }
+
     /* contenteditable placeholder for empty doc */
     .preview-doc[data-empty="1"] > p:only-child:empty::before,
     .preview-doc[data-empty="1"]:empty::before {
@@ -348,6 +447,7 @@
     .upload-label input { display: none; }
     .material-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
     .material-card {
+      position: relative;
       min-width: 0;
       overflow: hidden;
       border: 1px solid var(--border);
@@ -357,8 +457,32 @@
     .material-card[draggable="true"] { cursor: grab; }
     .material-card img { display: block; width: 100%; aspect-ratio: 1.25; object-fit: cover; background: var(--surface-3); }
     .material-info { padding: 8px; }
-    .material-title { overflow: hidden; margin-bottom: 8px; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-    .material-card button { width: 100%; border-radius: var(--radius-md); padding: 8px 9px; font-size: 12px; }
+    .material-title { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    /* 仅当悬停在该卡片上时，右上角出现的「插入」按钮 */
+    .material-insert {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      width: auto;
+      padding: 5px 9px;
+      border: 1px solid var(--primary);
+      border-radius: var(--radius-full);
+      color: var(--on-accent);
+      background: var(--primary);
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 2px 6px rgba(0,0,0,.3);
+      opacity: 0;
+      transform: translateY(-2px);
+      pointer-events: none;
+      transition: opacity var(--t-fast), transform var(--t-fast), background var(--t-fast);
+    }
+    .material-insert .icon { width: 13px; height: 13px; }
+    .material-insert:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+    .material-card:hover .material-insert { opacity: 1; transform: translateY(0); pointer-events: auto; }
     .empty { padding: 22px; border: 1px dashed var(--border); border-radius: var(--radius-lg); color: var(--muted); text-align: center; background: var(--surface-2); }
 
     .toast {
@@ -380,7 +504,7 @@
     }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
-    @media (max-width: 1180px) {
+    @media (max-width: 980px) {
       .workspace { grid-template-columns: 1fr; }
       .panel { min-height: auto; }
       .preview-wrap { min-height: 360px; }
@@ -390,7 +514,7 @@
       .page { width: min(100% - 24px, 1560px); padding-top: 20px; }
       header { align-items: flex-start; flex-direction: column; }
       .toolbar { justify-content: flex-start; }
-      .editor-tools, .material-grid { grid-template-columns: 1fr; }
+      .material-grid { grid-template-columns: 1fr; }
       .preview-doc { padding: 24px 22px 32px; }
     }
 
@@ -445,35 +569,21 @@
     <section class="workspace">
       <section class="panel">
         <div class="panel-head">
-          <div class="panel-title"><span class="step">1</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>文案信息</div>
-          <span class="hint" id="wordCount">0 字</span>
-        </div>
-        <div class="panel-body">
-          <div class="field">
-            <label for="editorTitle">标题</label>
-            <input id="editorTitle" placeholder="给这篇文案起一个标题" />
-          </div>
-          <div class="editor-tools">
-            <button class="btn" id="addParagraphBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>追加段落</button>
-            <button class="btn danger" id="clearDraftBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>清空编辑页</button>
-          </div>
-          <div class="meta-line">直接在中间的预览里改字、回车换段、删段；用上方工具栏设标题级别与加粗/斜体/下划线/颜色/字体；图片从右侧素材插入。所见即所得。</div>
-          <div class="field" style="margin-top:14px;">
-            <label for="markdownSource">Markdown 源码（只读，调试用）</label>
-            <textarea id="markdownSource" readonly aria-readonly="true" style="min-height:160px;font-family:var(--font-mono);font-size:13px;" placeholder="编辑预览后这里会显示对应的 Markdown 源码"></textarea>
-          </div>
-          <div class="meta-line" id="draftMeta">草稿会保存在本机浏览器 localStorage；下次从主页点“继续编辑草稿”或直接打开编辑页会自动载入。</div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div class="panel-title"><span class="step">2</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>预览即编辑</div>
+          <div class="panel-title"><span class="step">1</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>编辑和预览</div>
           <select id="platformPreset" aria-label="平台预设">
             <option value="xhs">小红书长图 · 1080 宽</option>
             <option value="wechat">公众号头图感 · 900 宽</option>
             <option value="simple">简洁通用 · 800 宽</option>
           </select>
+        </div>
+        <div class="editor-head">
+          <input id="editorTitle" class="editor-title-input" placeholder="给这篇文案起一个标题" />
+          <div class="editor-head-actions">
+            <button class="btn small" id="addParagraphBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>追加段落</button>
+            <button class="btn small danger" id="clearDraftBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>清空编辑页</button>
+            <span class="spacer"></span>
+            <span class="meta" id="wordCount">0 字</span>
+          </div>
         </div>
         <div class="rt-toolbar" id="rtToolbar" aria-label="富文本工具栏">
           <div class="rt-group">
@@ -490,10 +600,17 @@
             <button class="rt-btn u-style" data-cmd="underline" title="下划线 (Ctrl+U)" aria-label="下划线">U</button>
           </div>
           <div class="rt-group">
-            <label class="rt-btn" for="foreColor" title="文字颜色" aria-label="文字颜色" style="padding:0 6px;">
-              <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
-            </label>
-            <input class="rt-color" type="color" id="foreColor" value="#e11d48" title="选择文字颜色" aria-label="选择文字颜色" />
+            <div class="rt-color-wrap">
+              <button type="button" class="rt-color-main" id="colorApply" title="把当前颜色应用到选区（点击即上色）" aria-label="应用当前颜色">
+                <span class="swatch" id="colorSwatch"></span>
+                <svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
+              </button>
+              <span class="rt-color-presets" id="colorPresets" aria-label="最近颜色"></span>
+              <span class="rt-color-add rt-btn" title="自定义颜色" aria-label="自定义颜色">
+                +
+                <input type="color" id="foreColor" value="#e11d48" aria-label="选择文字颜色" />
+              </span>
+            </div>
             <select class="rt-select" id="fontName" title="字体" aria-label="字体">
               <option value="">默认字体</option>
               <option value="'PingFang SC','Microsoft YaHei',sans-serif">黑体 / 无衬线</option>
@@ -504,19 +621,25 @@
             </select>
           </div>
           <div class="rt-group">
-            <button class="rt-btn" id="toolbarInsertImage" title="从素材插入图片到光标处" aria-label="插入图片">
-              <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+            <button class="rt-btn" id="formatPainter" title="格式刷：先把光标放在带格式的文字上点此，再选中目标文字" aria-label="格式刷">
+              <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H6a2 2 0 0 0-2 2v.5"/><path d="M9 10v4a3 3 0 0 0 3 3v0a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a1 1 0 0 1 1-1h0"/></svg>
+            </button>
+          </div>
+          <div class="rt-group">
+            <button class="rt-btn" id="insertPageBreak" title="插入分页符：导出长图时此处会切成下一张图" aria-label="插入分页符">
+              <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
             </button>
           </div>
         </div>
         <div class="preview-wrap">
           <article class="preview-doc" id="previewDoc" contenteditable="true" spellcheck="false" aria-label="可直接编辑的文案预览"></article>
         </div>
+        <div class="meta-line" id="draftMeta" style="padding:10px 14px 14px;">草稿会保存在本机浏览器 localStorage；下次从主页点“继续编辑草稿”或直接打开编辑页会自动载入。</div>
       </section>
 
       <section class="panel">
         <div class="panel-head">
-          <div class="panel-title"><span class="step">3</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>素材区</div>
+          <div class="panel-title"><span class="step">2</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>素材区</div>
           <span class="hint">生成图 + 手动导入</span>
         </div>
         <div class="panel-body">
@@ -526,7 +649,7 @@
               导入本地图片到素材区
               <input id="assetUpload" type="file" accept="image/*" multiple />
             </label>
-            <div class="meta-line">点击“插入预览”或把素材拖到中间预览里，图片会以可视化卡片进入正文并参与长图导出。</div>
+            <div class="meta-line">悬停图片右上角点「插入」或把素材拖到左侧预览里，图片会以可视化卡片进入正文并参与长图导出。</div>
           </div>
           <div class="material-grid" id="materialGrid"></div>
         </div>
@@ -542,7 +665,6 @@
     const titleInput = document.getElementById('editorTitle');
     const materialGrid = document.getElementById('materialGrid');
     const previewDoc = document.getElementById('previewDoc');
-    const markdownSource = document.getElementById('markdownSource');
     const wordCount = document.getElementById('wordCount');
     const toast = document.getElementById('toast');
     const draftMeta = document.getElementById('draftMeta');
@@ -552,6 +674,9 @@
     let sourceTopic = null;
     let currentDraftId = null;
     let savedSelection = null; // remembered Range so toolbar buttons keep the caret/selection
+    let draggedFigure = null; // figure being dragged inside the preview (move, not copy)
+    const MOVE_MIME = 'application/x-hotstream-move';
+    const ASSET_MIME = 'application/x-hotstream-asset';
 
     // ── Markdown <-> HTML helpers (vendor libs) ──
     const turndownService = (typeof TurndownService !== 'undefined')
@@ -639,6 +764,9 @@
     const HEADING_LEVELS = new Set(['h1', 'h2', 'h3']);
 
     function normalizeBlock(block, index = 0) {
+      if (block?.type === 'pagebreak') {
+        return { id: block.id || makeId('pagebreak'), type: 'pagebreak' };
+      }
       if (block?.type === 'image') {
         const url = block.url || block.displayUrl || block.originalUrl || '';
         const asset = block.assetId ? materials.find(item => item.id === block.assetId) : ensureMaterialForImage(url, block.title || block.alt || `图片 ${index + 1}`);
@@ -692,6 +820,13 @@
           out.push({ id: makeId('text'), type: 'text', level, md: heading[2].trim() });
           continue;
         }
+        // 整行的 --- / *** / ___（thematic break）-> 分页符块。
+        // 注：生成提示词已禁止用 --- 包裹正文，不会误判生成内容。
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+          flushParagraph();
+          out.push({ id: makeId('pagebreak'), type: 'pagebreak' });
+          continue;
+        }
         if (line.trim() === '') {
           flushParagraph();
           continue;
@@ -706,6 +841,9 @@
     function blocksToMarkdown(list) {
       return (list || [])
         .map(block => {
+          if (block.type === 'pagebreak') {
+            return '---';
+          }
           if (block.type === 'image') {
             return `![${(block.title || '图片素材').replace(/[\[\]]/g, '')}](${block.url})`;
           }
@@ -811,14 +949,19 @@
     function imageFigureHtml(block) {
       const safeUrl = escapeHtml(block.url);
       const safeTitle = escapeHtml(block.title || '图片素材');
-      return `<figure contenteditable="false" data-block-id="${escapeHtml(block.id)}"${block.assetId ? ` data-asset-id="${escapeHtml(block.assetId)}"` : ''}>` +
-        `<img src="${safeUrl}" alt="${safeTitle}" referrerpolicy="no-referrer" crossorigin="anonymous" />` +
+      return `<figure contenteditable="false" draggable="true" data-block-id="${escapeHtml(block.id)}"${block.assetId ? ` data-asset-id="${escapeHtml(block.assetId)}"` : ''}>` +
+        `<img src="${safeUrl}" alt="${safeTitle}" draggable="false" referrerpolicy="no-referrer" crossorigin="anonymous" />` +
         `<div class="fig-tools"><button type="button" class="rep" data-fig-action="replace" title="替换图片">替换</button>` +
         `<button type="button" class="del" data-fig-action="delete" title="删除图片">删除</button></div>` +
         `</figure>`;
     }
 
+    function pageBreakHtml(block) {
+      return `<hr class="pagebreak" data-pagebreak="1" data-block-id="${escapeHtml(block.id)}" contenteditable="false">`;
+    }
+
     function blockToElementHtml(block) {
+      if (block.type === 'pagebreak') return pageBreakHtml(block);
       if (block.type === 'image') return imageFigureHtml(block);
       const tag = HEADING_LEVELS.has(block.level) ? block.level : 'p';
       const inner = inlineMdToHtml(block.md) || '<br>';
@@ -851,6 +994,22 @@
             }
           });
         });
+        // 正文内图片的拖动 = 移动（不复制）。idempotent: wireFigureTools 可能多次调用。
+        if (!fig.dataset.moveWired) {
+          fig.dataset.moveWired = '1';
+          fig.addEventListener('dragstart', event => {
+            draggedFigure = fig;
+            try {
+              event.dataTransfer.setData(MOVE_MIME, fig.dataset.blockId || '');
+              event.dataTransfer.effectAllowed = 'move';
+            } catch (e) {}
+            fig.classList.add('dragging');
+          });
+          fig.addEventListener('dragend', () => {
+            fig.classList.remove('dragging');
+            draggedFigure = null;
+          });
+        }
       });
     }
 
@@ -873,6 +1032,11 @@
       const next = [];
       Array.from(previewDoc.children).forEach(el => {
         const tag = el.tagName ? el.tagName.toLowerCase() : '';
+        // 分页符：hr.pagebreak 或任何带 [data-pagebreak] 的直接子块。
+        if (tag === 'hr' && el.classList.contains('pagebreak') || el.hasAttribute && el.hasAttribute('data-pagebreak')) {
+          next.push({ id: el.dataset.blockId || makeId('pagebreak'), type: 'pagebreak' });
+          return;
+        }
         if (tag === 'figure') {
           const id = el.dataset.blockId || makeId('image');
           const img = el.querySelector('img');
@@ -910,14 +1074,19 @@
       materialGrid.innerHTML = materials.map(asset => `
         <div class="material-card" draggable="true" data-asset-id="${escapeHtml(asset.id)}">
           <img src="${escapeHtml(asset.displayUrl)}" alt="${escapeHtml(asset.title)}" referrerpolicy="no-referrer" />
+          <button type="button" class="material-insert" data-insert="${escapeHtml(asset.id)}" title="插入到预览光标处" aria-label="插入到预览">
+            <svg class="icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>插入
+          </button>
           <div class="material-info">
             <div class="material-title">${escapeHtml(asset.title)} · ${escapeHtml(asset.source)}</div>
-            <button class="btn" data-insert="${escapeHtml(asset.id)}">插入预览</button>
           </div>
         </div>
       `).join('');
       materialGrid.querySelectorAll('[data-insert]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        // mousedown 不抢预览里已记忆的选区/光标
+        btn.addEventListener('mousedown', e => e.preventDefault());
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
           const asset = materials.find(item => item.id === btn.dataset.insert);
           if (asset) insertImageAtCaret(asset);
         });
@@ -931,8 +1100,6 @@
     }
 
     function updateDerived({ autoSave = true } = {}) {
-      const md = blocksToMarkdown(blocks);
-      if (markdownSource) markdownSource.value = md;
       const count = blocks
         .filter(block => block.type === 'text')
         .map(block => inlineHtmlToMd(inlineMdToHtml(block.md)) || String(block.md || ''))
@@ -1068,6 +1235,38 @@
       syncBlocksFromDom();
     }
 
+    // ── 在光标所在顶层块之后插入一个分页符块，并补一个空段落便于继续输入 ──
+    function insertPageBreak() {
+      if (previewDoc.getAttribute('data-empty') === '1') previewDoc.removeAttribute('data-empty');
+      restoreSelection();
+      const hr = document.createElement('hr');
+      hr.className = 'pagebreak';
+      hr.setAttribute('data-pagebreak', '1');
+      hr.setAttribute('contenteditable', 'false');
+      hr.dataset.blockId = makeId('pagebreak');
+      let blockEl = currentBlockElement();
+      if (blockEl && blockEl !== previewDoc) {
+        blockEl.after(hr);
+      } else {
+        previewDoc.appendChild(hr);
+      }
+      // 分页符后补一个空段落，方便继续书写下一段内容。
+      const after = document.createElement('p');
+      after.innerHTML = '<br>';
+      after.dataset.blockId = makeId('text');
+      hr.after(after);
+      const range = document.createRange();
+      range.selectNodeContents(after);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      savedSelection = range.cloneRange();
+      previewDoc.focus();
+      syncBlocksFromDom();
+      showToast('已插入分页符：导出长图时此处会切成下一张图');
+    }
+
     function addFiles(files) {
       Array.from(files || []).forEach((file, index) => {
         if (!file.type.startsWith('image/')) return;
@@ -1089,11 +1288,25 @@
     }
 
     // ── Export long image with html2canvas (faithful style render) ──
+    //   有分页符时按 .pagebreak 切成多张图（一段一图），第 1 段带标题/来源。
+    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+    // 给克隆容器套上与现状一致的 staged 宽度/白底样式。
+    function styleStagedDoc(el, docWidth) {
+      el.style.width = docWidth + 'px';
+      el.style.maxWidth = 'none';
+      el.style.margin = '0';
+      el.style.boxShadow = 'none';
+      el.style.background = '#ffffff';
+    }
+
     async function exportLongImage() {
       if (!blocks.length) return showToast('没有可导出的正文');
       if (typeof html2canvas === 'undefined') return showToast('导出库未加载，请刷新后再试');
       const title = titleInput.value.trim() || 'HotStream 文案';
       const preset = presets[document.getElementById('platformPreset').value] || presets.xhs;
+      const docWidth = Math.round(preset.width / 1.86); // preview-doc max ~580px maps to 1080 export
+      const safeTitle = title.replace(/[^0-9A-Za-z一-鿿_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'hotstream-long-image';
 
       // Build a clean clone of the styled preview (strip editing chrome).
       const clone = previewDoc.cloneNode(true);
@@ -1102,6 +1315,7 @@
       clone.removeAttribute('data-empty');
       clone.querySelectorAll('[contenteditable]').forEach(n => n.removeAttribute('contenteditable'));
       clone.querySelectorAll('.fig-tools').forEach(n => n.remove());
+      clone.querySelectorAll('.pagebreak.selected').forEach(n => n.classList.remove('selected'));
 
       // Prepend the title + source as styled nodes (kept out of the editable body).
       if (sourceTopic) {
@@ -1117,33 +1331,71 @@
         clone.insertBefore(h, clone.firstChild);
       }
 
-      // Stage off-screen at the platform width so wrapping matches the export size.
+      // 把克隆的顶层子节点按 .pagebreak 切成 N 段（分页符本身不进任何段）。
+      const segments = [[]];
+      Array.from(clone.children).forEach(child => {
+        const isBreak = child.tagName === 'HR' && child.classList.contains('pagebreak') || (child.hasAttribute && child.hasAttribute('data-pagebreak'));
+        if (isBreak) {
+          segments.push([]); // 开新段；相邻分页符 → 中间是空段，后面会过滤
+        } else {
+          segments[segments.length - 1].push(child);
+        }
+      });
+      // 去掉空段（相邻分页符 / 文档首尾分页符产生的空段不出图）。
+      // 去掉每段首尾的空段落（如分页符后自动补的空 <p>），避免第 2 张起顶部留白。
+      const isEmptyNode = (n) => n && n.tagName === 'P' && !n.querySelector('img,figure') && !(n.textContent || '').trim();
+      const trimSeg = (seg) => {
+        let s = 0, e = seg.length;
+        while (s < e && isEmptyNode(seg[s])) s++;
+        while (e > s && isEmptyNode(seg[e - 1])) e--;
+        return seg.slice(s, e);
+      };
+      const filled = segments.map(trimSeg).filter(seg => seg.length > 0);
+
       const stage = document.createElement('div');
       stage.style.cssText = 'position:fixed;left:-99999px;top:0;z-index:-1;';
-      const docWidth = Math.round(preset.width / 1.86); // preview-doc max ~580px maps to 1080 export
-      clone.style.width = docWidth + 'px';
-      clone.style.maxWidth = 'none';
-      clone.style.margin = '0';
-      clone.style.boxShadow = 'none';
-      clone.style.background = '#ffffff';
-      stage.appendChild(clone);
       document.body.appendChild(stage);
 
+      const h2cOpts = { useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false };
+
       try {
-        const canvas = await html2canvas(clone, {
-          useCORS: true,
-          scale: 2,
-          backgroundColor: '#ffffff',
-          logging: false
-        });
-        const link = document.createElement('a');
-        const safeTitle = title.replace(/[^0-9A-Za-z一-鿿_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'hotstream-long-image';
-        link.download = `${safeTitle}.png`;
-        link.href = canvas.toDataURL('image/png');
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        showToast('长图已导出');
+        // N==1（无有效分页符 / 仅一段）：维持现状，导出单张 文件名.png。
+        if (filled.length <= 1) {
+          styleStagedDoc(clone, docWidth);
+          stage.appendChild(clone);
+          const canvas = await html2canvas(clone, h2cOpts);
+          const link = document.createElement('a');
+          link.download = `${safeTitle}.png`;
+          link.href = canvas.toDataURL('image/png');
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          showToast('长图已导出');
+          return;
+        }
+
+        // N>1：逐段生成干净的 .preview-doc 克隆容器并依次渲染下载。
+        const total = filled.length;
+        showToast(`正在导出 ${total} 张分页图…`);
+        for (let i = 0; i < total; i++) {
+          const seg = document.createElement('article');
+          seg.className = 'preview-doc';
+          styleStagedDoc(seg, docWidth);
+          // 标题/来源已 prepend 在第 1 段的节点里；后续段只放该段内容。
+          filled[i].forEach(node => seg.appendChild(node));
+          stage.appendChild(seg);
+          const canvas = await html2canvas(seg, h2cOpts);
+          const link = document.createElement('a');
+          link.download = `${safeTitle}_${i + 1}.png`;
+          link.href = canvas.toDataURL('image/png');
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          seg.remove();
+          // 同一用户手势内顺序触发多次下载；每次之间小延时避免被浏览器节流/合并。
+          if (i < total - 1) await sleep(250);
+        }
+        showToast(`已导出 ${total} 张分页图`);
       } catch (err) {
         showToast('导出失败：' + (err && err.message ? err.message : '请稍后再试'));
       } finally {
@@ -1168,28 +1420,116 @@
       if (document.activeElement === previewDoc) { rememberSelection(); }
     });
 
-    // Accept dropped materials into the editable preview.
-    previewDoc.addEventListener('dragover', event => {
-      if (event.dataTransfer && Array.from(event.dataTransfer.types || []).includes('application/x-hotstream-asset')) {
+    // ── 分页符删除：点击选中（红色高亮）→ Backspace/Delete 删除；
+    //    或光标在分页符后块的起始处 Backspace 也删除其前的分页符。 ──
+    let selectedPageBreak = null;
+    function clearSelectedPageBreak() {
+      if (selectedPageBreak) selectedPageBreak.classList.remove('selected');
+      selectedPageBreak = null;
+    }
+    previewDoc.addEventListener('click', event => {
+      const hr = event.target.closest ? event.target.closest('hr.pagebreak,[data-pagebreak]') : null;
+      if (hr && previewDoc.contains(hr)) {
+        clearSelectedPageBreak();
+        selectedPageBreak = hr;
+        hr.classList.add('selected');
+      } else {
+        clearSelectedPageBreak();
+      }
+    });
+    previewDoc.addEventListener('keydown', event => {
+      if (event.key !== 'Backspace' && event.key !== 'Delete') {
+        if (selectedPageBreak) clearSelectedPageBreak();
+        return;
+      }
+      // 1) 已选中某分页符 → 直接删它
+      if (selectedPageBreak && previewDoc.contains(selectedPageBreak)) {
         event.preventDefault();
+        const hr = selectedPageBreak;
+        clearSelectedPageBreak();
+        hr.remove();
+        syncBlocksFromDom();
+        showToast('已删除分页符');
+        return;
+      }
+      // 2) 光标在某块最开头按 Backspace，且其前一个兄弟是分页符 → 删该分页符
+      if (event.key === 'Backspace') {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
+        const range = sel.getRangeAt(0);
+        if (range.startOffset !== 0) return;
+        const blockEl = topLevelBlockFromNode(range.startContainer);
+        if (!blockEl) return;
+        const prev = blockEl.previousElementSibling;
+        if (prev && (prev.classList?.contains('pagebreak') || prev.hasAttribute('data-pagebreak'))) {
+          event.preventDefault();
+          prev.remove();
+          syncBlocksFromDom();
+          showToast('已删除分页符');
+        }
+      }
+    });
+
+    // 取放置点对应的 caret Range（跨浏览器）
+    function caretRangeFromPoint(x, y) {
+      if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
+      if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(x, y);
+        if (!pos) return null;
+        const r = document.createRange();
+        r.setStart(pos.offsetNode, pos.offset);
+        r.collapse(true);
+        return r;
+      }
+      return null;
+    }
+
+    // 从一个 DOM 节点向上找到 previewDoc 的直接子块
+    function topLevelBlockFromNode(node) {
+      if (!node) return null;
+      if (node.nodeType === 3) node = node.parentNode;
+      while (node && node.parentNode !== previewDoc && node !== previewDoc) node = node.parentNode;
+      return (node && node !== previewDoc) ? node : null;
+    }
+
+    // Accept dropped materials (copy) or moved figures (move) into the editable preview.
+    previewDoc.addEventListener('dragover', event => {
+      const types = event.dataTransfer ? Array.from(event.dataTransfer.types || []) : [];
+      if (types.includes(MOVE_MIME) || draggedFigure) {
+        event.preventDefault();
+        try { event.dataTransfer.dropEffect = 'move'; } catch (e) {}
+      } else if (types.includes(ASSET_MIME)) {
+        event.preventDefault();
+        try { event.dataTransfer.dropEffect = 'copy'; } catch (e) {}
       }
     });
     previewDoc.addEventListener('drop', event => {
-      const assetId = event.dataTransfer.getData('application/x-hotstream-asset');
+      const types = event.dataTransfer ? Array.from(event.dataTransfer.types || []) : [];
+      // ── 移动正文内已有图片（不复制）──
+      if (types.includes(MOVE_MIME) || draggedFigure) {
+        event.preventDefault(); // 阻止 contenteditable 默认的图片复制
+        const fig = draggedFigure;
+        draggedFigure = null;
+        if (!fig) return;
+        fig.classList.remove('dragging');
+        const range = caretRangeFromPoint(event.clientX, event.clientY);
+        let target = range ? topLevelBlockFromNode(range.startContainer) : null;
+        // 放在自身上 / 找不到目标：不动
+        if (!target || target === fig) { syncBlocksFromDom(); return; }
+        // 把被拖 figure 移动到目标块之后（DOM 中先移除再插入，保证只剩一份）
+        target.after(fig);
+        wireFigureTools();
+        syncBlocksFromDom();
+        showToast('已移动图片');
+        return;
+      }
+      // ── 从素材区拖入（复制，插入新图）──
+      const assetId = event.dataTransfer.getData(ASSET_MIME);
       if (!assetId) return;
       event.preventDefault();
       const asset = materials.find(item => item.id === assetId);
       if (!asset) return;
-      // place caret at drop point if possible
-      const range = (document.caretRangeFromPoint && document.caretRangeFromPoint(event.clientX, event.clientY))
-        || (document.caretPositionFromPoint && (() => {
-            const pos = document.caretPositionFromPoint(event.clientX, event.clientY);
-            if (!pos) return null;
-            const r = document.createRange();
-            r.setStart(pos.offsetNode, pos.offset);
-            r.collapse(true);
-            return r;
-          })());
+      const range = caretRangeFromPoint(event.clientX, event.clientY);
       if (range) {
         const sel = window.getSelection();
         sel.removeAllRanges();
@@ -1208,21 +1548,162 @@
       btn.addEventListener('click', () => execInline(btn.dataset.cmd));
     });
 
+    // ── 颜色一键应用 + 最近颜色预设（≤5，FIFO，持久化）──
+    const COLOR_KEY = 'hotstream.editorColor';
+    const COLOR_PRESETS_KEY = 'hotstream.editorColorPresets';
+    const COLOR_PRESETS_MAX = 5;
+    const colorApplyBtn = document.getElementById('colorApply');
+    const colorSwatch = document.getElementById('colorSwatch');
+    const colorPresetsEl = document.getElementById('colorPresets');
     const foreColorInput = document.getElementById('foreColor');
+
+    let currentColor = '#e11d48';
+    let colorPresets = [];
+    try {
+      const c = localStorage.getItem(COLOR_KEY);
+      if (c) currentColor = c;
+      const p = JSON.parse(localStorage.getItem(COLOR_PRESETS_KEY) || '[]');
+      if (Array.isArray(p)) colorPresets = p.filter(x => typeof x === 'string').slice(0, COLOR_PRESETS_MAX);
+    } catch (e) {}
+
+    function persistColors() {
+      try {
+        localStorage.setItem(COLOR_KEY, currentColor);
+        localStorage.setItem(COLOR_PRESETS_KEY, JSON.stringify(colorPresets));
+      } catch (e) {}
+    }
+
+    function setCurrentColor(color) {
+      currentColor = color;
+      if (colorSwatch) colorSwatch.style.background = color;
+      if (foreColorInput) foreColorInput.value = color;
+      persistColors();
+    }
+
+    // 把一个颜色加入预设：重复则提到最前；超过 5 个 FIFO 移除最早的。
+    function pushPreset(color) {
+      const idx = colorPresets.indexOf(color);
+      if (idx !== -1) colorPresets.splice(idx, 1);
+      colorPresets.push(color);
+      while (colorPresets.length > COLOR_PRESETS_MAX) colorPresets.shift();
+      persistColors();
+      renderColorPresets();
+    }
+
+    function renderColorPresets() {
+      colorPresetsEl.innerHTML = colorPresets.map(c =>
+        `<button type="button" class="rt-color-preset" data-color="${escapeHtml(c)}" style="background:${escapeHtml(c)}" title="应用 ${escapeHtml(c)}" aria-label="应用颜色 ${escapeHtml(c)}"></button>`
+      ).join('');
+      colorPresetsEl.querySelectorAll('.rt-color-preset').forEach(btn => {
+        btn.addEventListener('mousedown', e => { e.preventDefault(); rememberSelection(); });
+        btn.addEventListener('click', () => {
+          const color = btn.dataset.color;
+          execInline('foreColor', color);
+          setCurrentColor(color);
+        });
+      });
+    }
+
+    // 主「颜色」按钮：点击即把 currentColor 应用到选区
+    colorApplyBtn.addEventListener('mousedown', e => { e.preventDefault(); rememberSelection(); });
+    colorApplyBtn.addEventListener('click', () => execInline('foreColor', currentColor));
+
+    // 自定义/+ 入口：选了新颜色 → 应用 + 设为当前 + 入预设
     foreColorInput.addEventListener('mousedown', rememberSelection);
-    foreColorInput.addEventListener('input', () => execInline('foreColor', foreColorInput.value));
+    foreColorInput.addEventListener('input', () => {
+      const color = foreColorInput.value;
+      execInline('foreColor', color);
+      setCurrentColor(color);
+      pushPreset(color);
+    });
+
+    setCurrentColor(currentColor);
+    renderColorPresets();
+
+    // ── 格式刷（仿 Word 单次）：捕获当前格式 → 选中目标文字后逐项应用 ──
+    const formatPainterBtn = document.getElementById('formatPainter');
+    let painterFormat = null; // { bold, italic, underline, color, font } | null
+
+    function normalizeColorValue(v) {
+      // queryCommandValue('foreColor') 可能返回 rgb(...) 或 #hex；统一成可用于 foreColor 的字符串
+      if (!v) return '';
+      const s = String(v).trim();
+      if (!s || s === 'rgb(0, 0, 0)') return s; // 黑色也照样应用
+      return s;
+    }
+
+    function capturePainterFormat() {
+      restoreSelection();
+      let bold = false, italic = false, underline = false, color = '', font = '';
+      try { bold = document.queryCommandState('bold'); } catch (e) {}
+      try { italic = document.queryCommandState('italic'); } catch (e) {}
+      try { underline = document.queryCommandState('underline'); } catch (e) {}
+      try { color = normalizeColorValue(document.queryCommandValue('foreColor')); } catch (e) {}
+      try { font = String(document.queryCommandValue('fontName') || '').replace(/^["']|["']$/g, ''); } catch (e) {}
+      return { bold, italic, underline, color, font };
+    }
+
+    function setPainterActive(on) {
+      formatPainterBtn.dataset.active = on ? '1' : '0';
+      formatPainterBtn.classList.toggle('painting', on);
+      previewDoc.classList.toggle('painting', on);
+    }
+
+    function exitPainter() {
+      painterFormat = null;
+      setPainterActive(false);
+    }
+
+    function applyPainterFormat(fmt) {
+      // 逐项应用：B/I/U 仅在需要开启时切换（queryCommandState 为 false 才 toggle 开）
+      restoreSelection();
+      try {
+        if (fmt.bold && !document.queryCommandState('bold')) document.execCommand('bold', false, null);
+        if (fmt.italic && !document.queryCommandState('italic')) document.execCommand('italic', false, null);
+        if (fmt.underline && !document.queryCommandState('underline')) document.execCommand('underline', false, null);
+        if (fmt.color) document.execCommand('foreColor', false, fmt.color);
+        if (fmt.font) document.execCommand('fontName', false, fmt.font);
+      } catch (e) {}
+      rememberSelection();
+      syncBlocksFromDom();
+      syncToolbarFromSelection();
+    }
+
+    formatPainterBtn.addEventListener('mousedown', e => { e.preventDefault(); rememberSelection(); });
+    formatPainterBtn.addEventListener('click', () => {
+      if (painterFormat) { exitPainter(); return; } // 再点一次取消
+      painterFormat = capturePainterFormat();
+      setPainterActive(true);
+      showToast('格式刷已就绪：选中目标文字即可套用格式');
+    });
+
+    // 选中目标文字（mouseup 得到非空选区）后套用并退出刷格式态
+    previewDoc.addEventListener('mouseup', () => {
+      if (!painterFormat) return;
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && !sel.isCollapsed && previewDoc.contains(sel.anchorNode)) {
+        const fmt = painterFormat;
+        rememberSelection();
+        applyPainterFormat(fmt);
+        exitPainter();
+        showToast('已套用格式');
+      }
+    });
+
+    // Esc 退出刷格式态
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && painterFormat) exitPainter();
+    });
+
+    // ── 分页符按钮 ──
+    const insertPageBreakBtn = document.getElementById('insertPageBreak');
+    insertPageBreakBtn.addEventListener('mousedown', e => { e.preventDefault(); rememberSelection(); });
+    insertPageBreakBtn.addEventListener('click', insertPageBreak);
 
     const fontNameSelect = document.getElementById('fontName');
     fontNameSelect.addEventListener('mousedown', rememberSelection);
     fontNameSelect.addEventListener('change', () => {
       if (fontNameSelect.value) execInline('fontName', fontNameSelect.value);
-    });
-
-    document.getElementById('toolbarInsertImage').addEventListener('mousedown', e => e.preventDefault());
-    document.getElementById('toolbarInsertImage').addEventListener('click', () => {
-      if (!materials.length) return showToast('素材区暂无图片；先在右侧导入或等待生成图');
-      restoreSelection();
-      insertImageAtCaret(materials[0]);
     });
 
     titleInput.addEventListener('input', () => updateDerived());
