@@ -22,7 +22,10 @@ from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics
 from hotstream.video_analyzer import analyze_video_with_qwen
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-UI_DIR = PROJECT_ROOT / "ui"
+# Single frontend source: the production-served files under web/legacy/. The
+# Python/Vercel standalone modes serve the same files (they used to point at a
+# now-removed ui/ copy that drifted out of sync with production).
+UI_DIR = PROJECT_ROOT / "web" / "legacy"
 
 
 def _json_bytes(payload: dict[str, Any]) -> bytes:

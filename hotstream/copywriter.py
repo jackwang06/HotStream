@@ -37,6 +37,18 @@ DEFAULT_GLOBAL_PROMPT = (
 
 DEFAULT_USER_BRIEF = "适合小红书/公众号开头，语气简洁、有信息量，可直接发布。"
 
+# 固定的 Markdown 排版指令：无论用户预设如何，都追加到 system_prompt，
+# 保证 DeepSeek 输出是工整美观的 Markdown（供「预览即编辑器」WYSIWYG 解析为块）。
+MARKDOWN_OUTPUT_INSTRUCTION = (
+    "\n\n【输出格式 · 必须遵守】请用 Markdown 组织整篇正文，做到工整美观：\n"
+    "- 用一行「# 」开头作为主标题（全篇只有一个 # 主标题）；\n"
+    "- 用「## 」「### 」组织小标题，层级清晰；\n"
+    "- 段落之间用一个空行分隔；\n"
+    "- 重点词句用 **加粗**，需要强调时可用 *斜体*；\n"
+    "- 不要用代码块（```）、表格、分割线（---）来包裹或承载正文；\n"
+    "- 只输出推文正文本身，不要输出任何与正文无关的说明、解释或元信息。"
+)
+
 # 「默认提示词」= 每次生成文案的"任务+硬性要求+输出格式"指令脚手架。
 # 这是与具体热点无关的指令模板，per-user 的 user_settings.default_prompt 为空时回落到它。
 # 措辞与原 build_default_temporary_prompt 逐字保留，不要改写规则内容。
@@ -51,11 +63,14 @@ DEFAULT_PROMPT_TEMPLATE = (
     "6. 禁止编造价格、活动日期、营业时间、优惠政策、名人到访、交通班次、游客评价。\n"
     "7. 语气像真实公众号/小红书推文：有开头钩子、有信息展开、有情绪/观点、有结尾互动。\n"
     "8. 字数控制在 250-450 字，段落短，适合移动端阅读。\n\n"
-    "输出格式：\n"
-    "标题：一句有传播感但不夸张的标题\n\n"
-    "开头：2-3 句，直接抓住读者注意力\n\n"
-    "正文：3-5 个短段落，围绕热点和前山牧场四季牧歌展开，不列提纲\n\n"
-    "结尾：一句互动式收束，引导评论或转发"
+    "输出格式（Markdown）：\n\n"
+    "# 一句有传播感但不夸张的标题\n\n"
+    "## 开头\n\n"
+    "2-3 句，直接抓住读者注意力，可用 **加粗** 突出关键信息\n\n"
+    "## 正文\n\n"
+    "3-5 个短段落，围绕热点和前山牧场四季牧歌展开，不列提纲\n\n"
+    "## 结尾\n\n"
+    "一句互动式收束，引导评论或转发"
 )
 
 
@@ -171,6 +186,9 @@ def build_deepseek_messages(
     default_prompt: str | None = None,
 ) -> list[dict[str, str]]:
     system_prompt = (global_prompt or DEFAULT_GLOBAL_PROMPT).strip()
+    # 无论用户预设如何，都追加固定的 Markdown 排版指令到 system_prompt，
+    # 使输出统一为 Markdown（messages 结构不变，仍为 [system,(knowledge),user]）。
+    system_prompt = system_prompt + MARKDOWN_OUTPUT_INSTRUCTION
     user_prompt = (
         temporary_prompt
         or build_default_temporary_prompt(

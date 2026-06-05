@@ -6,6 +6,7 @@ import pytest
 from hotstream.copywriter import (
     DEFAULT_GLOBAL_PROMPT,
     DEFAULT_PROMPT_TEMPLATE,
+    MARKDOWN_OUTPUT_INSTRUCTION,
     build_default_temporary_prompt,
     build_deepseek_messages,
     generate_copy_with_deepseek,
@@ -56,10 +57,10 @@ def test_build_deepseek_messages_allows_global_and_temporary_prompt_overrides():
         temporary_prompt="只写 3 句话，第一句话必须有冲突感。",
     )
 
-    assert messages == [
-        {"role": "system", "content": "你是犀利短评作者。"},
-        {"role": "user", "content": "只写 3 句话，第一句话必须有冲突感。"},
-    ]
+    # system_prompt always gets MARKDOWN_OUTPUT_INSTRUCTION appended.
+    assert messages[0]["role"] == "system"
+    assert messages[0]["content"] == "你是犀利短评作者。" + MARKDOWN_OUTPUT_INSTRUCTION
+    assert messages[1] == {"role": "user", "content": "只写 3 句话，第一句话必须有冲突感。"}
 
 
 def test_build_default_temporary_prompt_contains_topic_and_user_brief():
@@ -110,7 +111,9 @@ def test_default_prompt_template_holds_only_the_topic_agnostic_scaffold():
     assert "禁止编造价格、活动日期、营业时间" in DEFAULT_PROMPT_TEMPLATE
     assert "字数控制在 250-450 字" in DEFAULT_PROMPT_TEMPLATE
     assert "输出格式" in DEFAULT_PROMPT_TEMPLATE
-    assert "结尾：一句互动式收束，引导评论或转发" in DEFAULT_PROMPT_TEMPLATE
+    # Output format is now Markdown-style: h2 headings instead of plain labels.
+    assert "## 结尾" in DEFAULT_PROMPT_TEMPLATE
+    assert "一句互动式收束，引导评论或转发" in DEFAULT_PROMPT_TEMPLATE
     # It must NOT bake in any concrete hot-topic material.
     assert "热点标题：" not in DEFAULT_PROMPT_TEMPLATE
     assert "用户补充要求" not in DEFAULT_PROMPT_TEMPLATE
@@ -130,7 +133,9 @@ def test_build_default_temporary_prompt_uses_default_template_then_materials():
     # Default path still surfaces the factory template's signature sentences.
     assert "请基于以下热点写一篇可直接发布的中文推文" in instructions
     assert "禁止编造价格、活动日期、营业时间" in instructions
-    assert "结尾：一句互动式收束，引导评论或转发" in instructions
+    # Output format is now Markdown-style.
+    assert "## 结尾" in instructions
+    assert "一句互动式收束，引导评论或转发" in instructions
     # Dynamic materials live after the separator, not inside the instructions.
     assert "热点标题：AI 应用爆发" in materials
     assert "公众号，300 字以内" in materials
@@ -262,10 +267,12 @@ def test_generate_copy_with_deepseek_uses_prompt_overrides_in_request_body():
             temporary_prompt="临时提示词",
         )
 
-    assert captured["body"]["messages"] == [
-        {"role": "system", "content": "全局设定"},
-        {"role": "user", "content": "临时提示词"},
-    ]
+    # system_prompt always gets MARKDOWN_OUTPUT_INSTRUCTION appended.
+    assert captured["body"]["messages"][0] == {
+        "role": "system",
+        "content": "全局设定" + MARKDOWN_OUTPUT_INSTRUCTION,
+    }
+    assert captured["body"]["messages"][1] == {"role": "user", "content": "临时提示词"}
 
 
 def test_generate_copy_with_deepseek_requires_api_key():

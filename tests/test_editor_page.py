@@ -4,108 +4,93 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def read_ui_file(name: str) -> str:
-    return (PROJECT_ROOT / "ui" / name).read_text(encoding="utf-8")
+def read_legacy_file(name: str) -> str:
+    """Read a production-served frontend file.
+
+    The active delivery is Next.js serving ``web/legacy/`` (authed legacy route);
+    the Python server also serves the same directory at its root. These tests
+    assert against the REAL served files (previously they read the stale ``ui/``
+    copy, which diverged from production).
+    """
+    return (PROJECT_ROOT / "web" / "legacy" / name).read_text(encoding="utf-8")
 
 
-def test_editor_page_exists_with_core_editor_regions():
-    content = read_ui_file("editor.html")
+# ── Editor (WYSIWYG, Markdown-backed) ──────────────────────────────────────
 
+def test_editor_is_wysiwyg_markdown_backed():
+    content = read_legacy_file("editor.html")
     assert "HotStream 文案编辑器" in content
-    assert "id=\"editorText\"" in content
-    assert "id=\"blockEditor\"" in content
-    assert "id=\"materialGrid\"" in content
-    assert "id=\"exportImageBtn\"" in content
+    # The preview itself is the editable surface (所见即所得).
+    assert "previewDoc" in content
+    assert "contenteditable" in content
+    # Markdown block model + conversion bridges.
+    assert "markdownToBlocks" in content
+    assert "blocksToMarkdown" in content
+
+
+def test_editor_uses_local_vendored_libs():
+    content = read_legacy_file("editor.html")
+    assert "/vendor/marked.min.js" in content
+    assert "turndown" in content
+    assert "html2canvas" in content
+
+
+def test_editor_export_and_draft_keys():
+    content = read_legacy_file("editor.html")
+    assert 'id="exportImageBtn"' in content
     assert "导出长图" in content
+    assert "hotstream.editorDraft" in content
+    assert "hotstream.editorLiveDraft" in content
 
 
-def test_home_page_has_prominent_edit_and_draft_entries():
-    content = read_ui_file("index.html")
+# ── Home: edit / draft handoff ─────────────────────────────────────────────
 
-    assert "id=\"editContentBtn\"" in content
+def test_home_edit_and_draft_entries():
+    content = read_legacy_file("index.html")
+    assert 'id="editContentBtn"' in content
     assert "生成后编辑内容" in content
-    assert "id=\"continueDraftBtn\"" in content
+    assert 'id="continueDraftBtn"' in content
     assert "继续编辑草稿" in content
     assert "hotstream.editorDraft" in content
     assert "hotstream.editorLiveDraft" in content
-    assert "editor.html" in content
 
 
-def test_home_topic_rows_have_original_link_icon_opening_new_tab():
-    content = read_ui_file("index.html")
-
-    assert "class=\"topic-link\"" in content
-    assert "target=\"_blank\"" in content
-    assert "rel=\"noopener noreferrer\"" in content
-    assert "aria-label=\"打开原文链接" in content
-    assert "↗" in content
+def test_home_topic_rows_open_original_link_in_new_tab():
+    content = read_legacy_file("index.html")
+    assert 'class="topic-link"' in content
+    assert 'target="_blank"' in content
+    assert 'rel="noopener noreferrer"' in content
     assert "event.stopPropagation()" in content
-    assert "<button class=\"topic\"" not in content
-    assert "role=\"button\"" in content
-    assert "tabindex=\"0\"" in content
 
 
-def test_editor_uses_visual_blocks_instead_of_markdown_image_codes():
-    content = read_ui_file("editor.html")
-
-    assert "id=\"blockEditor\"" in content
-    assert "draggable=\"true\"" in content
-    assert "data-block-type=\"image\"" in content
-    assert "moveBlock" in content
-    assert "insertImageBlock" in content
-    assert "Markdown 图片行" not in content
-
-
-def test_editor_removes_low_value_divider_action_and_adds_draft_import():
-    content = read_ui_file("editor.html")
-
-    assert "insertDividerBtn" not in content
-    assert "插入分隔" not in content
-    assert "id=\"loadDraftBtn\"" in content
-    assert "载入本地草稿" in content
-    assert "下次从主页点“继续编辑草稿”" in content
-
-
-def test_home_page_uses_poetic_campaign_title_not_literal_workflow_copy():
-    content = read_ui_file("index.html")
-
+def test_home_uses_poetic_campaign_title():
+    content = read_legacy_file("index.html")
     assert "前山如画，四季成歌" in content
-    assert "抓热点，给前山牧场四季牧歌写推文。" not in content
 
 
-def test_home_page_has_bilibili_video_controls_and_qwen_flow():
-    content = read_ui_file("index.html")
+# ── Home: data sources, category filter, count ─────────────────────────────
 
+def test_home_has_all_sources_category_and_count():
+    content = read_legacy_file("index.html")
     assert 'value="bilibili"' in content
-    assert "B站视频" in content
-    # Category dropdown is now the unified #category element (visible for all sources).
-    assert 'id="category"' in content
-    assert 'id="qwenApiKey"' in content
-    assert "/api/settings" in content
-    assert "loadServerSettings" in content
-    assert 'id="videoAnalysisOutput"' in content
-    assert "/api/analyze-video" in content
-    assert "qwen_analysis" in content
-    assert "source_images" in content
-    assert "前山牧场四季牧歌" in content
-
-
-def test_editor_preview_height_aligns_with_editor_work_area():
-    content = read_ui_file("editor.html")
-
-    assert "--editor-work-area-height: calc(100vh - 382px);" in content
-    assert ".block-editor" in content
-    assert "min-height: var(--editor-work-area-height);" in content
-    assert ".preview-wrap" in content
-    assert "height: 620px" not in content
-
-
-def test_home_page_bilibili_query_is_sent_to_backend_not_only_local_filter():
-    content = read_ui_file("index.html")
-
-    assert "params.set('keyword'" in content
+    assert 'value="douyin"' in content       # 抖音 source
+    assert 'value="custom"' in content        # 自定义链接 source
+    assert 'id="bilibiliCategory"' in content  # unified category dropdown
+    assert 'id="limitInput"' in content        # configurable count (1-100)
     assert "params.set('category'" in content
-    assert "params.set('sort', 'traffic_desc')" in content
-    # Category is now sent via the unified categorySelect element.
-    assert "categorySelect.value" in content
-    assert "/api/hot-topics?${params.toString()}" in content
+
+
+def test_home_custom_source_url_parsing():
+    content = read_legacy_file("index.html")
+    assert 'id="customUrl"' in content
+    assert "parseCustomBtn" in content
+    assert "/api/custom-source" in content
+
+
+def test_home_generation_and_qwen_flow():
+    content = read_legacy_file("index.html")
+    assert "/api/hot-topics" in content
+    assert "/api/analyze-video" in content
+    assert "/api/generate-copy" in content
+    assert "qwen_analysis" in content
+    assert "前山牧场四季牧歌" in content

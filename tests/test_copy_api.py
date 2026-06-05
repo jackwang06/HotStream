@@ -178,7 +178,9 @@ def test_build_prompts_response_default_path_uses_factory_template():
 
     payload = json.loads(body.decode("utf-8"))
     assert "请基于以下热点写一篇可直接发布的中文推文" in payload["temporary_prompt"]
-    assert "结尾：一句互动式收束，引导评论或转发" in payload["temporary_prompt"]
+    # Output format is now Markdown-style with ## headings.
+    assert "## 结尾" in payload["temporary_prompt"]
+    assert "一句互动式收束，引导评论或转发" in payload["temporary_prompt"]
 
 
 def test_build_prompt_defaults_returns_factory_soul_and_prompt():

@@ -1367,10 +1367,28 @@
         if (data.success && data.drafts && data.drafts.length > 0) {
           const latest = data.drafts[0];
           const cb = latest.content_blocks || [];
+          // Convert blocks to Markdown for the editor's content field.
+          // New block model: [{id,type:'text',level,md},{id,type:'image',url,title}]
+          // Old model: array of plain strings.
+          function blocksToMarkdown(blocks) {
+            if (!Array.isArray(blocks) || !blocks.length) return '';
+            return blocks.map(b => {
+              if (typeof b === 'string') return b;
+              if (!b || typeof b !== 'object') return '';
+              if (b.type === 'image') return `![${b.title || ''}](${b.url || ''})`;
+              const md = b.md || '';
+              if (b.level === 'h1') return '# ' + md;
+              if (b.level === 'h2') return '## ' + md;
+              if (b.level === 'h3') return '### ' + md;
+              return md;
+            }).join('\n\n');
+          }
+          const mdContent = blocksToMarkdown(cb);
           // Write to the key the editor actually reads (localStorage[EDIT_IMPORT_KEY]).
           localStorage.setItem(EDIT_IMPORT_KEY, JSON.stringify({
             title: latest.title || '',
-            content: Array.isArray(cb) ? cb.join('\n\n') : String(cb || ''),
+            content: mdContent,
+            content_blocks: cb,
             images: latest.images || [],
             topic: null,
             updated_at: latest.updated_at || new Date().toISOString(),
