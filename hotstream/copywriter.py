@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -377,6 +378,171 @@ def generate_ai_assist(
         raise RuntimeError(f"DeepSeek 网络请求失败：{exc.reason}") from exc
     except json.JSONDecodeError as exc:
         raise RuntimeError("DeepSeek 返回了无法解析的 JSON") from exc
+
+
+# 精选热点（curated topics）允许选出的上限。提示词与解析层都以此为界。
+CURATED_TOPICS_MAX = 12
+
+
+def _extract_selection_object(text: str) -> dict[str, Any] | None:
+    """Best-effort parse of the DeepSeek selection reply into a JSON object.
+
+    Mirrors ``video_analyzer._extract_json_object``: try the raw text, any
+    ```json fenced block, then the outermost ``{...}`` span via regex, returning
+    the first candidate that decodes to a dict. Returns ``None`` if none parse.
+    """
+    stripped = (text or "").strip()
+    if not stripped:
+        return None
+    candidates = [stripped]
+    fenced = re.search(r"```(?:json)?\s*(.*?)```", stripped, re.S | re.I)
+    if fenced:
+        candidates.insert(0, fenced.group(1).strip())
+    obj = re.search(r"\{.*\}", stripped, re.S)
+    if obj:
+        candidates.append(obj.group(0))
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def _build_selection_messages(
+    topics: list[dict[str, Any]],
+    knowledge_base: str | None = None,
+) -> list[dict[str, str]]:
+    """Assemble the [system, user] messages asking DeepSeek to pick borrowable hot topics.
+
+    The user message stacks: the scenic profile (so the model knows what the
+    venue is and what it can credibly借势), the optional knowledge-base
+    reference (planned activities etc.), the numbered topic list (one per line as
+    ``序号. [来源] 标题``) and the selection instruction with the strict JSON
+    output contract.
+    """
+    system_prompt = (
+        "你是文旅借势选品助手，为「前山牧场四季牧歌民俗风情园」"
+        "从一批全网热点里挑出最适合借势宣传的。只依据给定信息判断。"
+    )
+
+    sections: list[str] = [scenic_profile_prompt_section()]
+
+    knowledge_text = (knowledge_base or "").strip()
+    if knowledge_text:
+        sections.append("知识库参考资料（景区已上传的景点/活动等信息）：\n" + knowledge_text)
+
+    topic_lines = []
+    for index, topic in enumerate(topics, start=1):
+        source = str(topic.get("source") or "").strip() or "未知来源"
+        title = str(topic.get("title") or "").strip()
+        topic_lines.append(f"{index}. [{source}] {title}")
+    sections.append("候选热点清单（每行：序号. [来源] 标题）：\n" + "\n".join(topic_lines))
+
+    sections.append(
+        f"请从以上候选中选出最多 {CURATED_TOPICS_MAX} 条最适合为本景点借势宣传的热点"
+        "（风光/旅游/乡村/文旅类，或与知识库中将办活动相关的热点）。"
+        "严格只返回 JSON 对象，格式为 {\"selected\":[{\"index\":序号, \"reason\":\"20字内理由\"}]}，"
+        "index 必须是上面清单里的序号整数。"
+        "宁缺毋滥：不要选与景点无关、只能硬蹭的热点；没有合适的就返回空数组。"
+        "除 JSON 外不要输出任何其它文字。"
+    )
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "\n\n".join(sections)},
+    ]
+
+
+def select_relevant_topics(
+    topics: list[dict[str, Any]],
+    knowledge_base: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+    api_url: str | None = None,
+    timeout: int = 60,
+) -> list[dict[str, Any]]:
+    """Use DeepSeek to curate the borrow-worthy hot topics for the venue.
+
+    Aggregates a numbered list of candidate topics (each carrying its original
+    ``source``) plus the scenic profile and the enabled knowledge base, then asks
+    DeepSeek to return ``{"selected":[{"index":..,"reason":..}]}``. The reply is
+    parsed robustly (markdown fences stripped, outermost ``{...}`` span matched);
+    each returned index maps back to the original topic, which is returned with an
+    added ``reason`` field and its source preserved. Returns ``[]`` on empty
+    input, a parse failure, or an empty selection — never raises for those cases
+    (only an unfilled API key / network error propagates).
+    """
+    if not topics:
+        return []
+    load_project_env()
+    resolved_api_key = (api_key or "").strip()
+    if not resolved_api_key:
+        raise RuntimeError("DeepSeek API Key 未填写")
+
+    endpoint = _normalize_chat_endpoint(api_url)
+    resolved_model = (model or os.getenv("DEEPSEEK_MODEL") or DEFAULT_DEEPSEEK_MODEL).strip()
+    body = {
+        "model": resolved_model,
+        "messages": _build_selection_messages(topics, knowledge_base=knowledge_base),
+        "temperature": 0.3,
+        "max_tokens": 1200,
+        "stream": False,
+    }
+    request = Request(
+        endpoint,
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {resolved_api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        content = _extract_deepseek_content(payload)
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"DeepSeek 调用失败：HTTP {exc.code} {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"DeepSeek 网络请求失败：{exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("DeepSeek 返回了无法解析的 JSON") from exc
+
+    parsed = _extract_selection_object(content)
+    if not parsed:
+        return []
+    selected = parsed.get("selected")
+    if not isinstance(selected, list):
+        return []
+
+    results: list[dict[str, Any]] = []
+    seen_indices: set[int] = set()
+    for item in selected:
+        if not isinstance(item, dict):
+            continue
+        raw_index = item.get("index")
+        try:
+            index = int(raw_index)
+        except (TypeError, ValueError):
+            continue
+        # 1-based index into the original topics list; skip out-of-range/dupes.
+        if index < 1 or index > len(topics) or index in seen_indices:
+            continue
+        seen_indices.add(index)
+        topic = dict(topics[index - 1])
+        reason = str(item.get("reason") or "").strip()
+        if reason:
+            topic["reason"] = reason
+        results.append(topic)
+        if len(results) >= CURATED_TOPICS_MAX:
+            break
+    return results
 
 
 def _extract_deepseek_content(payload: dict[str, Any]) -> str:

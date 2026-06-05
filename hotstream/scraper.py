@@ -345,32 +345,186 @@ def _extract_xiaohongshu_initial_state(html: str) -> dict[str, Any]:
     return json.loads(raw)
 
 
+def _xiaohongshu_note_id(row: dict[str, Any], note: dict[str, Any]) -> str:
+    """Resolve a Xiaohongshu note id, real-id-first across known shapes.
+
+    The Explore ``__INITIAL_STATE__`` feed carries the note id on the *feed row*
+    (``row["id"]``), not inside ``noteCard``. The historical ``noteCard.noteId``
+    field no longer exists (live HTML shows 0 occurrences), which is why every
+    URL used to collapse to the Explore homepage. Probe the row-level id first,
+    then any noteCard fallbacks, returning "" only when nothing real is found.
+    """
+    candidates = [
+        row.get("id"),
+        row.get("noteId"),
+        row.get("note_id"),
+        note.get("noteId"),
+        note.get("note_id"),
+        note.get("id"),
+    ]
+    for candidate in candidates:
+        value = str(candidate or "").strip()
+        # Skip placeholder rows (e.g. ad/recommend slots) that lack a real id.
+        if value and value.lower() not in {"none", "null"}:
+            return value
+    return ""
+
+
+def _xiaohongshu_xsec_token(row: dict[str, Any], note: dict[str, Any]) -> str:
+    """Resolve the per-note ``xsec_token`` required to open a specific note.
+
+    The token lives at the feed-row level as ``xsecToken`` (camelCase) on the
+    Explore feed; older/other shapes spell it ``xsec_token``. It may also be
+    nested inside the noteCard. Empty string when absent (caller then omits it).
+    """
+    candidates = [
+        row.get("xsecToken"),
+        row.get("xsec_token"),
+        note.get("xsecToken"),
+        note.get("xsec_token"),
+    ]
+    for candidate in candidates:
+        value = str(candidate or "").strip()
+        if value and value.lower() not in {"none", "null"}:
+            return value
+    return ""
+
+
+def _xiaohongshu_note_url(note_id: str, xsec_token: str) -> str:
+    """Build a direct Explore note URL, falling back to the homepage only when
+    no real note id is available.
+
+    With a token we append ``xsec_token`` + ``xsec_source=pc_feed`` so the link
+    opens the concrete note (the explore feed gates note pages behind the
+    signed token); without a token we still link to ``/explore/{id}`` which is
+    far better than the old always-homepage behaviour.
+    """
+    if not note_id:
+        return "https://www.xiaohongshu.com/explore"
+    if xsec_token:
+        return (
+            f"https://www.xiaohongshu.com/explore/{note_id}"
+            f"?xsec_token={quote(xsec_token, safe='')}&xsec_source=pc_feed"
+        )
+    return f"https://www.xiaohongshu.com/explore/{note_id}"
+
+
+def _xiaohongshu_feed_rows(state: dict[str, Any]) -> list[Any]:
+    """Collect feed rows from every known Explore ``__INITIAL_STATE__`` container.
+
+    Live probing (anonymous, no login) shows the homepage now ships an *empty*
+    ``feed.feeds`` and renders notes client-side via a signed homefeed API. But
+    several sibling containers carry the same row shape when the page does SSR a
+    feed (edge cache / logged-in proxy / category landing): ``feed.feeds``,
+    ``feed.feedsWrapper`` and ``feed.placeholderFeeds``. We merge whatever is
+    populated (de-duping by row id) so the parser keeps working across shapes
+    instead of hard-coding the single, now-frequently-empty ``feeds`` key.
+    """
+    feed = state.get("feed")
+    if not isinstance(feed, dict):
+        return []
+    rows: list[Any] = []
+    seen: set[str] = set()
+    for key in ("feeds", "feedsWrapper", "placeholderFeeds"):
+        container = feed.get(key)
+        if not isinstance(container, list):
+            continue
+        for row in container:
+            if not isinstance(row, dict):
+                continue
+            note = row.get("noteCard") or row.get("note_card") or {}
+            note = note if isinstance(note, dict) else {}
+            note_id = _xiaohongshu_note_id(row, note)
+            dedup = note_id or id(row)  # fall back to object identity when id-less
+            if isinstance(dedup, str) and dedup in seen:
+                continue
+            if isinstance(dedup, str):
+                seen.add(dedup)
+            rows.append(row)
+    return rows
+
+
+def _xiaohongshu_valid_id_topics(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Last-resort topics built from ``feed.validIds.noteIds`` (id-only fallback).
+
+    When no row container carries renderable note cards, the homefeed id list
+    (``feed.validIds.noteIds``) may still hold real note ids. We turn each into a
+    ``/explore/{id}`` topic so the produced URL still points at a *real note*
+    (the whole point of the fix) rather than collapsing to the homepage. These
+    rows have no title/heat, so they are only used when the card path yields
+    nothing and are labelled as plain 推荐笔记.
+    """
+    feed = state.get("feed")
+    if not isinstance(feed, dict):
+        return []
+    valid_ids = feed.get("validIds")
+    note_ids = valid_ids.get("noteIds") if isinstance(valid_ids, dict) else None
+    if not isinstance(note_ids, list):
+        return []
+    topics: list[dict[str, Any]] = []
+    for raw_id in note_ids:
+        note_id = str(raw_id or "").strip()
+        if not note_id or note_id.lower() in {"none", "null"}:
+            continue
+        topics.append({
+            "rank": len(topics) + 1,
+            "title": f"小红书推荐笔记 {note_id[:8]}",
+            "url": _xiaohongshu_note_url(note_id, ""),
+            "hot_value": 0,
+            "label": "推荐笔记",
+            "source": "小红书",
+        })
+    return topics
+
+
 def parse_xiaohongshu_explore_page(html: str) -> list[dict[str, Any]]:
     """Normalize Xiaohongshu Explore initial feed notes into topic rows.
 
-    Xiaohongshu's dedicated hot-search API requires anti-bot headers. For the MVP,
-    we use the public Explore page's server-rendered initial feed as a stable
-    no-login source of currently recommended high-engagement notes.
+    Xiaohongshu's dedicated hot-search API requires anti-bot headers. For the MVP
+    we read the public Explore page's server-rendered ``__INITIAL_STATE__``.
+
+    Key fix: the note id and ``xsec_token`` are read from the *feed row* (the
+    current real shape) — ``row["id"]`` + ``row["xsecToken"]`` — NOT from the
+    historical ``noteCard.noteId`` (live HTML shows 0 occurrences). That stale
+    field was why every URL collapsed to the Explore homepage. With the real
+    row-level id (and token when present) the URL now opens the concrete note:
+    ``/explore/{id}?xsec_token=...&xsec_source=pc_feed``.
+
+    Rows are gathered from every known SSR container (``feeds`` /
+    ``feedsWrapper`` / ``placeholderFeeds``); if none render note cards we fall
+    back to ``feed.validIds.noteIds`` so the output still carries real note ids
+    rather than homepage links. Returns ``[]`` (never homepage rows) when no real
+    note id can be resolved at all.
     """
     state = _extract_xiaohongshu_initial_state(html)
-    rows = ((state.get("feed") or {}).get("feeds") or [])
+    rows = _xiaohongshu_feed_rows(state)
     topics: list[dict[str, Any]] = []
 
     for row in rows:
         note = row.get("noteCard") or row.get("note_card") or {}
+        if not isinstance(note, dict):
+            note = {}
         title = str(note.get("displayTitle") or note.get("title") or "").strip()
-        if not title:
+        note_id = _xiaohongshu_note_id(row, note)
+        # A row is only usable when it yields BOTH a real note id (so the URL is
+        # a concrete note, not the homepage) and a title to display.
+        if not title or not note_id:
             continue
-        note_id = str(note.get("noteId") or note.get("id") or "").strip()
+        xsec_token = _xiaohongshu_xsec_token(row, note)
         liked_count = str((note.get("interactInfo") or {}).get("likedCount") or "").strip()
         topics.append({
             "rank": len(topics) + 1,
             "title": title,
-            "url": f"https://www.xiaohongshu.com/explore/{note_id}" if note_id else "https://www.xiaohongshu.com/explore",
+            "url": _xiaohongshu_note_url(note_id, xsec_token),
             "hot_value": _parse_chinese_count(liked_count),
             "label": f"{liked_count}赞" if liked_count else "推荐笔记",
             "source": "小红书",
         })
+
+    # No renderable note cards (anonymous SSR now ships an empty feed): fall back
+    # to the id-only list so URLs still point at real notes, never the homepage.
+    if not topics:
+        topics = _xiaohongshu_valid_id_topics(state)
 
     return topics
 

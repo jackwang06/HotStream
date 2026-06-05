@@ -17,6 +17,7 @@ from hotstream.copywriter import (
     build_default_temporary_prompt,
     generate_ai_assist,
     generate_copy_with_deepseek,
+    select_relevant_topics,
 )
 from hotstream.image_scraper import build_custom_topic, fetch_related_images
 from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics
@@ -178,6 +179,83 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
             "copy": "",
         })
         return 502, headers, body
+
+
+# 精选热点聚合时每个数据源抓取的条数，以及参与精选的并发源。
+CURATED_SOURCES = ("toutiao", "zhihu", "xiaohongshu", "bilibili", "douyin")
+CURATED_PER_SOURCE_LIMIT = 25
+
+
+def build_curated_topics_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
+    """Build the /api/curated-topics JSON response.
+
+    Concurrently best-effort fetches the five hot-topic sources, aggregates them
+    into a single numbered pool (each topic keeps its original ``source``), then
+    asks DeepSeek (via ``select_relevant_topics``) to curate the entries most
+    suitable for借势-marketing the venue, using the scenic profile + knowledge
+    base. Returns ``{success, topics:[...含 source+reason]}``. A missing DeepSeek
+    key is a friendly 400; any other failure is a 502.
+    """
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+    }
+    try:
+        payload = json.loads(raw_body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return 400, headers, _json_bytes({"success": False, "error": "请求 JSON 格式不正确"})
+
+    api_key = str(payload.get("api_key") or "").strip()
+    api_url = str(payload.get("api_url") or "").strip() or None
+    model = str(payload.get("model") or "").strip() or None
+    knowledge_base = str(payload.get("knowledge_base") or "")
+    if not api_key:
+        return 400, headers, _json_bytes(
+            {"success": False, "error": "请先在设置配置文案生成 API Key", "topics": []}
+        )
+
+    try:
+        # Best-effort concurrent fetch of every source; a single source failing
+        # (network / anti-bot) is skipped rather than failing the whole curation.
+        def _fetch(source: str) -> list[dict[str, Any]]:
+            try:
+                return fetch_hot_topics(source, limit=CURATED_PER_SOURCE_LIMIT)
+            except Exception:
+                return []
+
+        aggregated: list[dict[str, Any]] = []
+        with ThreadPoolExecutor(max_workers=len(CURATED_SOURCES)) as executor:
+            for source_topics in executor.map(_fetch, CURATED_SOURCES):
+                for topic in source_topics:
+                    if isinstance(topic, dict) and str(topic.get("title") or "").strip():
+                        aggregated.append(topic)
+        # Give each aggregated topic a stable global rank for display.
+        for index, topic in enumerate(aggregated, start=1):
+            topic["rank"] = index
+
+        if not aggregated:
+            return 502, headers, _json_bytes(
+                {"success": False, "error": "暂时未能抓取到任何热点，请稍后再试", "topics": []}
+            )
+
+        selected = select_relevant_topics(
+            aggregated,
+            knowledge_base=knowledge_base,
+            api_key=api_key,
+            model=model,
+            api_url=api_url,
+        )
+        # Re-rank the curated subset so the frontend shows 1..n in selection order.
+        for index, topic in enumerate(selected, start=1):
+            topic["rank"] = index
+        body = _json_bytes({
+            "success": True,
+            "topics": selected,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return 200, headers, body
+    except Exception as exc:
+        return 502, headers, _json_bytes({"success": False, "error": str(exc), "topics": []})
 
 
 def build_prompts_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
@@ -549,7 +627,7 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler method name
         parsed = urlparse(self.path)
-        if parsed.path in {"/api/generate-copy", "/api/prompts", "/api/analyze-video", "/api/ai-assist", "/api/settings", "/api/drafts", "/api/history"}:
+        if parsed.path in {"/api/generate-copy", "/api/curated-topics", "/api/prompts", "/api/analyze-video", "/api/ai-assist", "/api/settings", "/api/drafts", "/api/history"}:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -561,7 +639,9 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/ai-assist":
                 stream_ai_assist_response(self, raw_body)
                 return
-            if parsed.path == "/api/prompts":
+            if parsed.path == "/api/curated-topics":
+                status, headers, body = build_curated_topics_response(raw_body)
+            elif parsed.path == "/api/prompts":
                 status, headers, body = build_prompts_response(raw_body)
             elif parsed.path == "/api/analyze-video":
                 status, headers, body = build_video_analysis_response(raw_body)

@@ -258,6 +258,45 @@
       text-align: center;
     }
 
+    #curateBtn {
+      margin-top: 10px;
+      background: linear-gradient(135deg, #6c47d4, #2fb389);
+      color: #fff;
+    }
+    #curateBtn:hover { background: linear-gradient(135deg, #7d56e0, #38c79a); }
+    #curateBtn:disabled { opacity: .6; cursor: not-allowed; }
+
+    .curate-hint {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .source-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.6;
+      background: var(--primary-soft);
+      color: var(--primary);
+      margin-left: 6px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .topic-reason {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      font-style: italic;
+      line-height: 1.4;
+    }
+
     .topic-list {
       display: grid;
       gap: 10px;
@@ -729,6 +768,8 @@
             <span class="hint" id="sourceHint">B站按公开播放量从高到低展示；输入关键词会请求 B站搜索接口。</span>
           </div>
           <button class="main-btn" id="fetchBtn">刷新今日头条热点</button>
+          <button class="main-btn" id="curateBtn">✨ 精选热点</button>
+          <div class="curate-hint">按知识库精选全网最契合本景点的热点（聚合多平台 · DeepSeek 智选）</div>
           <div class="fetch-meta" id="fetchMeta">进入页面后自动抓取，每 60 秒刷新一次。</div>
 
           <div class="topic-list" id="topicList">
@@ -794,6 +835,7 @@
     const imageSection = document.getElementById('imageSection');
     const toast = document.getElementById('toast');
     const fetchBtn = document.getElementById('fetchBtn');
+    const curateBtn = document.getElementById('curateBtn');
     const fetchMeta = document.getElementById('fetchMeta');
     const keywordInput = document.getElementById('keyword');
     const sourceSelect = document.getElementById('source');
@@ -1074,6 +1116,92 @@
     }
 
     fetchBtn.addEventListener('click', () => fetchHotTopics());
+
+    // ── 精选热点 ──────────────────────────────────────────────────────────────
+    async function fetchCuratedTopics() {
+      curateBtn.disabled = true;
+      curateBtn.textContent = 'AI 正在按知识库精选全网热点…';
+      selectedTopic = null;
+      topicList.innerHTML = '<div class="empty">AI 正在从多平台聚合并智选热点，请稍候（约 20–40 秒）…</div>';
+      try {
+        const response = await fetch('/api/curated-topics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.error || `请求失败 (${response.status})`);
+        }
+        const curatedTopics = payload.topics || [];
+        if (!curatedTopics.length) {
+          topicList.innerHTML = '<div class="empty">AI 未从当前全网热点中筛选出适合借势的内容，可稍后再试或直接使用普通热点。</div>';
+          showToast('精选结果为空');
+          return;
+        }
+        // Assign sequential ranks so the existing selectTopicItem lookup works.
+        curatedTopics.forEach((t, i) => { t.rank = i + 1; });
+        // Replace global topics so generate flow picks up the selected topic.
+        topics = curatedTopics;
+
+        fetchMeta.textContent = `AI 精选了 ${curatedTopics.length} 条跨平台热点 · 可直接选中生成文案`;
+
+        topicList.innerHTML = curatedTopics.map(topic => `
+          <div class="topic" role="button" tabindex="0" data-rank="${topic.rank}">
+            <span class="rank">${topic.rank}</span>
+            <span class="topic-text">
+              <strong>${escapeHtml(topic.title)}</strong>
+              <span class="topic-source">
+                <span class="source-badge">${escapeHtml(topic.source || '热点')}</span>
+              </span>
+              ${topic.reason ? `<span class="topic-reason">💡 ${escapeHtml(topic.reason)}</span>` : ''}
+            </span>
+            <span class="hot">热度 ${Number(topic.hot_value || 0).toLocaleString('zh-CN')}</span>
+            ${topic.url ? `
+              <a class="topic-link" href="${escapeHtml(topic.url)}" target="_blank" rel="noopener noreferrer" aria-label="打开原文链接：${escapeHtml(topic.title)}" title="打开原文链接"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+            ` : '<span class="topic-link disabled" aria-label="暂无原文链接" title="暂无原文链接"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17H7A5 5 0 0 1 7 7"/><path d="M15 7h2a5 5 0 0 1 4 8"/><line x1="8" x2="12" y1="12" y2="12"/><line x1="2" x2="22" y1="2" y2="22"/></svg></span>'}
+          </div>
+        `).join('');
+
+        // Wire up selection (same pattern as renderTopics inner function).
+        function selectCuratedItem(item) {
+          const newTopic = topics.find(t => String(t.rank) === item.dataset.rank);
+          if (!newTopic) return;
+          const newKey = topicKey(newTopic);
+          const changed = topicKey(selectedTopic) !== newKey;
+          document.querySelectorAll('.topic').forEach(el => el.classList.remove('selected'));
+          item.classList.add('selected');
+          selectedTopic = newTopic;
+          if (changed) resetVideoAnalysis('已选择热点。精选热点不支持视频分析，可直接生成文案。');
+          showToast('已选择精选热点');
+        }
+
+        document.querySelectorAll('.topic-link').forEach(link => {
+          link.addEventListener('click', event => event.stopPropagation());
+        });
+        document.querySelectorAll('.topic').forEach(item => {
+          item.addEventListener('click', () => selectCuratedItem(item));
+          item.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            selectCuratedItem(item);
+          });
+        });
+
+        showToast(`AI 精选了 ${curatedTopics.length} 条热点`);
+      } catch (error) {
+        topicList.innerHTML = `<div class="empty">精选热点失败：${escapeHtml(error.message)}</div>`;
+        fetchMeta.textContent = '精选失败，可手动刷新热点。';
+        showToast(`精选失败：${error.message}`);
+      } finally {
+        curateBtn.disabled = false;
+        curateBtn.textContent = '✨ 精选热点';
+      }
+    }
+
+    curateBtn.addEventListener('click', () => fetchCuratedTopics());
+    // ─────────────────────────────────────────────────────────────────────────
+
     sourceSelect.addEventListener('change', () => {
       selectedTopic = null;        // switching platform → drop stale selection + analysis
       resetVideoAnalysis();
