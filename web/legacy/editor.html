@@ -579,8 +579,8 @@
         <div class="editor-head">
           <input id="editorTitle" class="editor-title-input" placeholder="给这篇文案起一个标题" />
           <div class="editor-head-actions">
-            <button class="btn small" id="addParagraphBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>追加段落</button>
-            <button class="btn small danger" id="clearDraftBtn"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>清空编辑页</button>
+            <button class="btn small" id="undoBtn" title="撤销 (Ctrl+Z)" disabled><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M3 13A9 9 0 1 0 5.17 6"/></svg>撤销</button>
+            <button class="btn small" id="redoBtn" title="恢复 (Ctrl+Y)" disabled><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 7v6h-6"/><path d="M21 13A9 9 0 1 1 18.83 6"/></svg>恢复</button>
             <span class="spacer"></span>
             <span class="meta" id="wordCount">0 字</span>
           </div>
@@ -1159,6 +1159,7 @@
       sel.addRange(range);
       savedSelection = range.cloneRange();
       syncBlocksFromDom();
+      if (typeof pushHistoryNow === 'function') pushHistoryNow();
     }
 
     function syncToolbarFromSelection() {
@@ -1182,6 +1183,7 @@
       rememberSelection();
       syncBlocksFromDom();
       syncToolbarFromSelection();
+      if (typeof pushHistoryNow === 'function') pushHistoryNow();
     }
 
     // ── Insert an image figure at the caret position ──
@@ -1215,24 +1217,8 @@
       savedSelection = range.cloneRange();
       wireFigureTools();
       syncBlocksFromDom();
+      if (typeof pushHistoryNow === 'function') pushHistoryNow();
       showToast('素材已插入预览');
-    }
-
-    function appendParagraph() {
-      if (previewDoc.getAttribute('data-empty') === '1') previewDoc.removeAttribute('data-empty');
-      const p = document.createElement('p');
-      p.innerHTML = '<br>';
-      p.dataset.blockId = makeId('text');
-      previewDoc.appendChild(p);
-      const range = document.createRange();
-      range.selectNodeContents(p);
-      range.collapse(true);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-      savedSelection = range.cloneRange();
-      previewDoc.focus();
-      syncBlocksFromDom();
     }
 
     // ── 在光标所在顶层块之后插入一个分页符块，并补一个空段落便于继续输入 ──
@@ -1264,6 +1250,7 @@
       savedSelection = range.cloneRange();
       previewDoc.focus();
       syncBlocksFromDom();
+      if (typeof pushHistoryNow === 'function') pushHistoryNow();
       showToast('已插入分页符：导出长图时此处会切成下一张图');
     }
 
@@ -1709,25 +1696,101 @@
     titleInput.addEventListener('input', () => updateDerived());
     document.getElementById('platformPreset').addEventListener('change', () => {});
     document.getElementById('assetUpload').addEventListener('change', (event) => addFiles(event.target.files));
-    document.getElementById('addParagraphBtn').addEventListener('click', appendParagraph);
     document.getElementById('loadDraftBtn').addEventListener('click', () => { window.location.href = '/drafts'; });
     document.getElementById('saveDraftBtn').addEventListener('click', () => saveDraftToServer());
     document.getElementById('exportImageBtn').addEventListener('click', exportLongImage);
     document.getElementById('backBtn').addEventListener('click', () => { window.location.href = '/app'; });
-    document.getElementById('clearDraftBtn').addEventListener('click', () => {
-      if (!confirm('确定清空当前编辑页草稿吗？')) return;
-      titleInput.value = '';
-      blocks = [];
-      materials = [];
-      sourceTopic = null;
-      savedSelection = null;
-      localStorage.removeItem(LIVE_KEY);
-      localStorage.removeItem(IMPORT_KEY);
-      renderAll({ autoSave: false });
-      showToast('已清空编辑页');
+
+    // ── 撤销 / 恢复 历史栈 ─────────────────────────────────────────────────
+    const HISTORY_MAX = 30;
+    /** @type {string[]} */
+    const historyStack = [];
+    let historyIdx = -1;   // 指向当前快照
+    let _historyDebounce = null;
+
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+
+    function updateUndoRedoBtns() {
+      undoBtn.disabled = historyIdx <= 0;
+      redoBtn.disabled = historyIdx >= historyStack.length - 1;
+    }
+
+    /** 推一次快照（当前 previewDoc.innerHTML） */
+    function pushHistory() {
+      const snap = previewDoc.innerHTML;
+      // 与当前位置快照相同则不推
+      if (historyStack[historyIdx] === snap) return;
+      // 截断 redo 分支
+      historyStack.splice(historyIdx + 1);
+      historyStack.push(snap);
+      // 超出上限时丢最早的
+      if (historyStack.length > HISTORY_MAX) {
+        historyStack.shift();
+      }
+      historyIdx = historyStack.length - 1;
+      updateUndoRedoBtns();
+    }
+
+    /** debounced 版本，供 input 事件使用 */
+    function pushHistoryDebounced() {
+      clearTimeout(_historyDebounce);
+      _historyDebounce = setTimeout(pushHistory, 300);
+    }
+
+    /** 立即推快照（结构性操作后调用） */
+    function pushHistoryNow() {
+      clearTimeout(_historyDebounce);
+      pushHistory();
+    }
+
+    function applySnapshot(snap) {
+      previewDoc.innerHTML = snap;
+      // innerHTML 替换会丢掉图片块的删除/替换/拖动监听，需重新绑定。
+      wireFigureTools();
+      // 空文档时维持 placeholder（与 renderPreview 一致）。
+      if (!previewDoc.textContent.trim() && !previewDoc.querySelector('figure,img,hr.pagebreak')) {
+        previewDoc.setAttribute('data-empty', '1');
+      } else {
+        previewDoc.removeAttribute('data-empty');
+      }
+      syncBlocksFromDom();
+      saveDraft({ silent: true });
+      updateUndoRedoBtns();
+    }
+
+    function doUndo() {
+      if (historyIdx <= 0) return;
+      historyIdx--;
+      applySnapshot(historyStack[historyIdx]);
+    }
+
+    function doRedo() {
+      if (historyIdx >= historyStack.length - 1) return;
+      historyIdx++;
+      applySnapshot(historyStack[historyIdx]);
+    }
+
+    undoBtn.addEventListener('click', doUndo);
+    redoBtn.addEventListener('click', doRedo);
+
+    // Ctrl+Z / Ctrl+Y 拦截（仅在 previewDoc 有焦点时）
+    previewDoc.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        doUndo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        doRedo();
+      }
     });
 
+    // 监听 previewDoc input（debounce 推快照）
+    previewDoc.addEventListener('input', pushHistoryDebounced);
+
     loadInitialDraft();
+    // 初始快照（内容载入后立即推，保证第一次撤销能回到初始状态）
+    setTimeout(() => pushHistoryNow(), 0);
 
     // ── Current-user bar (injected by the Next.js auth layer) ──
     (async function userBar() {

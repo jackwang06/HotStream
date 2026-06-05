@@ -1,35 +1,52 @@
 import { query } from "./db";
 
 // ── Named prompt presets (per-user) ───────────────────────────────────────
-// Each user owns an unlimited number of named presets. user_settings.active_preset_id
-// points at the currently selected one (the starting point for the homepage prompt).
-// The "effective default prompt" resolves: active preset content → legacy
-// user_settings.default_prompt → "".
+// Each user owns an unlimited number of named presets, split into two kinds:
+//   kind='default' → 「默认提示词」类：starting point for the homepage prompt.
+//                    user_settings.active_preset_id points at the selected one.
+//   kind='soul'    → 「代理灵魂」类：the AI system persona (global_prompt).
+//                    user_settings.active_soul_preset_id points at the selected one.
+// The "effective default prompt" resolves: active default preset → legacy
+// user_settings.default_prompt → "". The "effective soul" resolves: active soul
+// preset → legacy user_settings.global_prompt → "" (backend supplies its own).
+
+export type PresetKind = "default" | "soul";
 
 export interface PresetRow {
   id: number;
   name: string;
   content: string;
+  kind: PresetKind;
   created_at: Date;
   updated_at: Date;
 }
 
-// All of the user's presets (newest-updated first) plus the currently selected id.
+// All of the user's presets of the given kind (newest-updated first) plus the
+// currently selected ids for BOTH kinds (so callers can show the right "active").
 export async function listPresets(
   userId: number,
-): Promise<{ presets: PresetRow[]; activePresetId: number | null }> {
+  kind: PresetKind = "default",
+): Promise<{
+  presets: PresetRow[];
+  activePresetId: number | null;
+  activeSoulPresetId: number | null;
+}> {
   const { rows } = await query<PresetRow>(
-    `SELECT id, name, content, created_at, updated_at
-       FROM prompt_presets WHERE user_id = $1
+    `SELECT id, name, content, kind, created_at, updated_at
+       FROM prompt_presets WHERE user_id = $1 AND kind = $2
       ORDER BY updated_at DESC`,
-    [userId],
+    [userId, kind],
   );
-  const { rows: settingsRows } = await query<{ active_preset_id: number | null }>(
-    `SELECT active_preset_id FROM user_settings WHERE user_id = $1`,
+  const { rows: settingsRows } = await query<{
+    active_preset_id: number | null;
+    active_soul_preset_id: number | null;
+  }>(
+    `SELECT active_preset_id, active_soul_preset_id FROM user_settings WHERE user_id = $1`,
     [userId],
   );
   const activePresetId = settingsRows[0]?.active_preset_id ?? null;
-  return { presets: rows, activePresetId };
+  const activeSoulPresetId = settingsRows[0]?.active_soul_preset_id ?? null;
+  return { presets: rows, activePresetId, activeSoulPresetId };
 }
 
 // Create a new preset owned by `userId`. Returns the new row.
@@ -37,19 +54,20 @@ export async function createPreset(
   userId: number,
   name: string,
   content: string,
+  kind: PresetKind = "default",
 ): Promise<PresetRow> {
   const { rows } = await query<PresetRow>(
-    `INSERT INTO prompt_presets (user_id, name, content)
-     VALUES ($1, $2, $3)
-     RETURNING id, name, content, created_at, updated_at`,
-    [userId, name, content],
+    `INSERT INTO prompt_presets (user_id, name, content, kind)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, name, content, kind, created_at, updated_at`,
+    [userId, name, content, kind],
   );
   return rows[0];
 }
 
 // Update name/content of the caller's own preset. `undefined` fields are left
 // unchanged (COALESCE). Returns true when a row was updated (i.e. it existed
-// and belonged to the user).
+// and belonged to the user). kind is immutable once created.
 export async function updatePreset(
   userId: number,
   id: number,
@@ -79,8 +97,17 @@ export async function getPresetOwner(id: number): Promise<number | null | undefi
   return rows.length ? rows[0].user_id : undefined;
 }
 
-// Delete the caller's own preset. If it was the active one, the FK
-// `ON DELETE SET NULL` automatically clears user_settings.active_preset_id.
+// The kind of a preset, or undefined when the row doesn't exist.
+export async function getPresetKind(id: number): Promise<PresetKind | undefined> {
+  const { rows } = await query<{ kind: PresetKind }>(
+    `SELECT kind FROM prompt_presets WHERE id = $1`,
+    [id],
+  );
+  return rows.length ? rows[0].kind : undefined;
+}
+
+// Delete the caller's own preset. If it was the active one (either kind), the FK
+// `ON DELETE SET NULL` automatically clears the matching user_settings column.
 // Returns true when a row was deleted.
 export async function deletePreset(userId: number, id: number): Promise<boolean> {
   const { rowCount } = await query(
@@ -90,19 +117,23 @@ export async function deletePreset(userId: number, id: number): Promise<boolean>
   return rowCount > 0;
 }
 
-// Set the user's active preset. The id is only applied when it belongs to the
-// user; pointing at someone else's / a missing preset is a no-op.
+// Set the user's active preset. Looks up the preset's kind and writes the
+// corresponding column (active_soul_preset_id for kind='soul', else
+// active_preset_id). The id is only applied when it belongs to the user;
+// pointing at someone else's / a missing preset is a no-op.
 export async function setActivePreset(userId: number, id: number): Promise<void> {
+  const kind = await getPresetKind(id);
+  const column = kind === "soul" ? "active_soul_preset_id" : "active_preset_id";
   await query(
     `UPDATE user_settings
-        SET active_preset_id = $2, updated_at = now()
+        SET ${column} = $2, updated_at = now()
       WHERE user_id = $1
         AND EXISTS (SELECT 1 FROM prompt_presets WHERE id = $2 AND user_id = $1)`,
     [userId, id],
   );
 }
 
-// The "effective default prompt": active preset content → legacy
+// The "effective default prompt": active default preset content → legacy
 // user_settings.default_prompt → "". Resolved server-side in a single query.
 export async function getActivePresetContent(userId: number): Promise<string> {
   const { rows } = await query<{ preset_content: string | null; default_prompt: string | null }>(
@@ -117,4 +148,22 @@ export async function getActivePresetContent(userId: number): Promise<string> {
   if (!row) return "";
   if (row.preset_content != null) return row.preset_content;
   return row.default_prompt ?? "";
+}
+
+// The "effective soul" (代理灵魂 / system persona): active soul preset content →
+// legacy user_settings.global_prompt → "" (backend supplies its own default).
+// Resolved server-side in a single query.
+export async function getActiveSoulContent(userId: number): Promise<string> {
+  const { rows } = await query<{ preset_content: string | null; global_prompt: string | null }>(
+    `SELECT p.content AS preset_content, s.global_prompt AS global_prompt
+       FROM user_settings s
+       LEFT JOIN prompt_presets p
+         ON p.id = s.active_soul_preset_id AND p.user_id = s.user_id
+      WHERE s.user_id = $1`,
+    [userId],
+  );
+  const row = rows[0];
+  if (!row) return "";
+  if (row.preset_content != null) return row.preset_content;
+  return row.global_prompt ?? "";
 }

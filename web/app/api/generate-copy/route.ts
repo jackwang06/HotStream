@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser, unauthorized, assertSameOrigin } from "@/lib/session";
 import { getUserSettings } from "@/lib/user-settings";
 import { getEnabledKnowledge } from "@/lib/knowledge";
-import { getActivePresetContent } from "@/lib/presets";
+import { getActivePresetContent, getActiveSoulContent } from "@/lib/presets";
 import { proxyPostJson } from "@/lib/proxy";
 
 export const dynamic = "force-dynamic";
@@ -59,10 +59,11 @@ export async function POST(req: Request) {
   // temporary_prompt would be used verbatim by Python and bypass that assembly,
   // so strip it unconditionally to keep the contract single-pathed.
   delete payload.temporary_prompt;
-  // Only forward global_prompt when the user has actually set one.
-  if (settings.global_prompt) {
-    payload.global_prompt = settings.global_prompt;
-  }
+  // Inject the user's EFFECTIVE 代理灵魂 (active soul preset → legacy
+  // global_prompt column) as the system persona; only forward when non-empty
+  // (same style as default_prompt below).
+  const soul = await getActiveSoulContent(user.id);
+  if (soul) payload.global_prompt = soul;
   // Body (i.e., the page's "本次提示词") takes priority; fall back to the
   // user's effective default prompt (active preset → legacy column) only when
   // the request body didn't supply one.

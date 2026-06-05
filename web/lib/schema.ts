@@ -78,10 +78,18 @@ CREATE TABLE IF NOT EXISTS wangyafei.prompt_presets (
 );
 CREATE INDEX IF NOT EXISTS idx_prompt_presets_user_id ON wangyafei.prompt_presets(user_id);
 
+-- kind: 'default' = 「默认提示词」类（首页本次提示词起点；现有行即此类）；
+--       'soul'    = 「代理灵魂」类（系统人设，注入为 global_prompt）。
+ALTER TABLE wangyafei.prompt_presets ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'default';
+
 -- The currently selected preset for each user (NULL = none; falls back to the
 -- legacy user_settings.default_prompt column). ON DELETE SET NULL keeps the
 -- column consistent when a preset is removed.
 ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS active_preset_id INTEGER REFERENCES wangyafei.prompt_presets(id) ON DELETE SET NULL;
+
+-- The currently selected 「代理灵魂」 preset (kind='soul'). NULL = none; falls back
+-- to the legacy user_settings.global_prompt column, then to the backend default.
+ALTER TABLE wangyafei.user_settings ADD COLUMN IF NOT EXISTS active_soul_preset_id INTEGER REFERENCES wangyafei.prompt_presets(id) ON DELETE SET NULL;
 
 ALTER TABLE wangyafei.drafts  ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES wangyafei.users(id) ON DELETE RESTRICT;
 ALTER TABLE wangyafei.history ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES wangyafei.users(id) ON DELETE RESTRICT;

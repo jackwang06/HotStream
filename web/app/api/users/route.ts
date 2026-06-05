@@ -6,6 +6,7 @@ import { listUsers } from "@/lib/users";
 import { hashPassword } from "@/lib/auth";
 import { getFactoryDefaultPrompt } from "@/lib/prompt-defaults";
 import { createPreset, setActivePreset } from "@/lib/presets";
+import { SOULS } from "@/lib/prompts";
 
 export const dynamic = "force-dynamic";
 
@@ -48,13 +49,25 @@ export async function POST(req: Request) {
     const id = rows[0].id;
     await query("INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [id]);
 
-    // Best-effort: seed the new user with a "默认" preset (factory template).
+    // Best-effort: seed the new user with a "默认" 默认提示词 preset (factory template).
     try {
       const seed = await getFactoryDefaultPrompt();
       if (seed) {
         const preset = await createPreset(id, "默认", seed);
         await setActivePreset(id, preset.id);
       }
+    } catch {
+      // Seed failure must not prevent account creation from succeeding.
+    }
+
+    // Best-effort: seed the four 代理灵魂 (soul) presets, selecting "默认".
+    try {
+      let defaultSoulId: number | null = null;
+      for (const soul of SOULS) {
+        const p = await createPreset(id, soul.name, soul.content, "soul");
+        if (soul.name === "默认") defaultSoulId = p.id;
+      }
+      if (defaultSoulId != null) await setActivePreset(id, defaultSoulId);
     } catch {
       // Seed failure must not prevent account creation from succeeding.
     }

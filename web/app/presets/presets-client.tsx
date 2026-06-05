@@ -4,10 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import styles from "./presets.module.css";
 import ThemeToggle from "@/app/theme-toggle";
 
+type Kind = "default" | "soul";
+
 interface Preset {
   id: number;
   name: string;
   content: string;
+  kind: string;
   created_at: string;
   updated_at: string;
 }
@@ -26,8 +29,16 @@ function preview(content: string): string {
 }
 
 export default function PresetsClient({ meName }: { meName: string }) {
-  const [presets, setPresets] = useState<Preset[]>([]);
+  const [activeTab, setActiveTab] = useState<Kind>("default");
+
+  // default kind state
+  const [defaultPresets, setDefaultPresets] = useState<Preset[]>([]);
   const [activePresetId, setActivePresetId] = useState<number | null>(null);
+
+  // soul kind state
+  const [soulPresets, setSoulPresets] = useState<Preset[]>([]);
+  const [activeSoulPresetId, setActiveSoulPresetId] = useState<number | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
@@ -43,26 +54,41 @@ export default function PresetsClient({ meName }: { meName: string }) {
 
   const notify = useCallback((text: string, ok: boolean) => setMsg({ text, ok }), []);
 
-  const refresh = useCallback(async () => {
+  const refreshKind = useCallback(async (kind: Kind) => {
     try {
-      const r = await fetch("/api/presets", { cache: "no-store" });
+      const r = await fetch(`/api/presets?kind=${kind}`, { cache: "no-store" });
       const d = await r.json();
       if (d.success) {
-        setPresets(d.presets as Preset[]);
-        setActivePresetId(typeof d.activePresetId === "number" ? d.activePresetId : null);
+        if (kind === "default") {
+          setDefaultPresets(d.presets as Preset[]);
+          setActivePresetId(typeof d.activePresetId === "number" ? d.activePresetId : null);
+        } else {
+          setSoulPresets(d.presets as Preset[]);
+          setActiveSoulPresetId(typeof d.activeSoulPresetId === "number" ? d.activeSoulPresetId : null);
+        }
       } else {
         notify(d.error || "加载预设失败", false);
       }
     } catch {
       notify("网络错误，无法加载预设", false);
+    }
+  }, [notify]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      await Promise.all([refreshKind("default"), refreshKind("soul")]);
     } finally {
       setLoading(false);
     }
-  }, [notify]);
+  }, [refreshKind]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const presets = activeTab === "default" ? defaultPresets : soulPresets;
+  const currentActiveId = activeTab === "default" ? activePresetId : activeSoulPresetId;
 
   async function createPreset() {
     const name = newName.trim();
@@ -73,17 +99,17 @@ export default function PresetsClient({ meName }: { meName: string }) {
     setBusy(true);
     notify("", true);
     try {
-      const r = await fetch("/api/presets", {
+      const r = await fetch(`/api/presets?kind=${activeTab}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, content: newContent }),
+        body: JSON.stringify({ name, content: newContent, kind: activeTab }),
       });
       const d = await r.json();
       if (d.success) {
         notify(`已新建预设「${name}」`, true);
         setNewName("");
         setNewContent("");
-        await refresh();
+        await refreshKind(activeTab);
       } else {
         notify(d.error || "新建失败", false);
       }
@@ -95,7 +121,7 @@ export default function PresetsClient({ meName }: { meName: string }) {
   }
 
   async function selectPreset(p: Preset) {
-    if (p.id === activePresetId) return;
+    if (p.id === currentActiveId) return;
     setBusy(true);
     notify("", true);
     try {
@@ -107,7 +133,7 @@ export default function PresetsClient({ meName }: { meName: string }) {
       const d = await r.json();
       if (d.success) {
         notify(`已选用「${p.name}」`, true);
-        await refresh();
+        await refreshKind(activeTab);
       } else {
         notify(d.error || "选用失败", false);
       }
@@ -149,7 +175,7 @@ export default function PresetsClient({ meName }: { meName: string }) {
       if (d.success) {
         notify(`已保存「${name}」`, true);
         cancelEdit();
-        await refresh();
+        await refreshKind(activeTab);
       } else {
         notify(d.error || "保存失败", false);
       }
@@ -170,7 +196,7 @@ export default function PresetsClient({ meName }: { meName: string }) {
       if (d.success) {
         notify(`已删除「${p.name}」`, true);
         if (editingId === p.id) cancelEdit();
-        await refresh();
+        await refreshKind(activeTab);
       } else {
         notify(d.error || "删除失败", false);
       }
@@ -179,6 +205,14 @@ export default function PresetsClient({ meName }: { meName: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function switchTab(tab: Kind) {
+    setActiveTab(tab);
+    cancelEdit();
+    setNewName("");
+    setNewContent("");
+    notify("", true);
   }
 
   async function logout() {
@@ -190,6 +224,15 @@ export default function PresetsClient({ meName }: { meName: string }) {
     window.location.href = "/login";
   }
 
+  const newPlaceholderName =
+    activeTab === "soul"
+      ? "例如：可爱 / 庄重 / 活泼 / 定制人设"
+      : "例如：小红书种草 / 抖音口播 / 公众号长文";
+  const newPlaceholderContent =
+    activeTab === "soul"
+      ? "选用该灵魂后，将作为 AI 的系统人设（代理灵魂）生效。可留空。"
+      : "选用该预设后，将作为首页「本次提示词」的起点。可留空。";
+
   return (
     <div className={styles.page}>
       <div className={styles.top}>
@@ -199,7 +242,7 @@ export default function PresetsClient({ meName }: { meName: string }) {
             <path d="M21 3h-6v18h6V3z" />
             <path d="M15 7H9v14h6V7z" />
           </svg>
-          提示词预设
+          预设管理
         </h1>
         <div className={styles.topRight}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -251,14 +294,42 @@ export default function PresetsClient({ meName }: { meName: string }) {
         </div>
       </div>
 
+      {/* 分段切换 */}
+      <div className={styles.tabs}>
+        <button
+          className={`${styles.tab} ${activeTab === "soul" ? styles.tabActive : ""}`}
+          onClick={() => switchTab("soul")}
+        >
+          <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 2a5 5 0 1 0 5 5" />
+            <path d="M12 12c-4.418 0-8 1.79-8 4v1h16v-1c0-2.21-3.582-4-8-4z" />
+            <path d="M17 2l5 5-5 5" />
+          </svg>
+          代理灵魂预设
+        </button>
+        <button
+          className={`${styles.tab} ${activeTab === "default" ? styles.tabActive : ""}`}
+          onClick={() => switchTab("default")}
+        >
+          <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9 11H3v10h6V11z" />
+            <path d="M21 3h-6v18h6V3z" />
+            <path d="M15 7H9v14h6V7z" />
+          </svg>
+          默认提示词预设
+        </button>
+      </div>
+
       {/* 新建预设 */}
       <div className={styles.card}>
-        <h2 className={styles.cardTitle}>新建预设</h2>
+        <h2 className={styles.cardTitle}>
+          {activeTab === "soul" ? "新建灵魂预设" : "新建提示词预设"}
+        </h2>
         <div className={styles.field}>
           <label className={styles.label}>名称（必填）</label>
           <input
             className={styles.input}
-            placeholder="例如：小红书种草 / 抖音口播 / 公众号长文"
+            placeholder={newPlaceholderName}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             maxLength={200}
@@ -267,10 +338,12 @@ export default function PresetsClient({ meName }: { meName: string }) {
           />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>提示词内容</label>
+          <label className={styles.label}>
+            {activeTab === "soul" ? "灵魂内容（系统人设）" : "提示词内容"}
+          </label>
           <textarea
             className={styles.textarea}
-            placeholder="选用该预设后，将作为首页「本次提示词」的起点。可留空。"
+            placeholder={newPlaceholderContent}
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             rows={5}
@@ -282,17 +355,23 @@ export default function PresetsClient({ meName }: { meName: string }) {
               <path d="M12 5v14" />
               <path d="M5 12h14" />
             </svg>
-            新建预设
+            {activeTab === "soul" ? "新建灵魂预设" : "新建预设"}
           </button>
         </div>
       </div>
 
       {/* 预设列表 */}
       <div className={styles.card}>
-        <h2 className={styles.cardTitle}>我的预设（{presets.length}）</h2>
+        <h2 className={styles.cardTitle}>
+          {activeTab === "soul"
+            ? `灵魂预设（${presets.length}）`
+            : `提示词预设（${presets.length}）`}
+        </h2>
 
         {loading ? (
-          <div className={styles.empty}>正在加载预设…</div>
+          <div className={styles.empty}>
+            正在加载预设…
+          </div>
         ) : presets.length === 0 ? (
           <div className={styles.empty}>
             <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -300,12 +379,16 @@ export default function PresetsClient({ meName }: { meName: string }) {
               <path d="M21 3h-6v18h6V3z" />
               <path d="M15 7H9v14h6V7z" />
             </svg>
-            <p className={styles.emptyText}>还没有任何预设，使用上方表单新建一条吧。</p>
+            <p className={styles.emptyText}>
+              {activeTab === "soul"
+                ? "还没有任何灵魂预设，使用上方表单新建一条吧。"
+                : "还没有任何预设，使用上方表单新建一条吧。"}
+            </p>
           </div>
         ) : (
           <ul className={styles.list}>
             {presets.map((p) => {
-              const isActive = p.id === activePresetId;
+              const isActive = p.id === currentActiveId;
               const isEditing = editingId === p.id;
               return (
                 <li key={p.id} className={`${styles.item} ${isActive ? styles.itemActive : ""}`}>
@@ -323,7 +406,9 @@ export default function PresetsClient({ meName }: { meName: string }) {
                         />
                       </div>
                       <div className={styles.field}>
-                        <label className={styles.label}>提示词内容</label>
+                        <label className={styles.label}>
+                          {activeTab === "soul" ? "灵魂内容（系统人设）" : "提示词内容"}
+                        </label>
                         <textarea
                           className={styles.textarea}
                           value={editContent}

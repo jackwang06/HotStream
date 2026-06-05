@@ -29,12 +29,9 @@ export default function ProfileClient({ meName }: { meName: string }) {
   const [hasVideoKey, setHasVideoKey] = useState(false);
   const [videoKeyMask, setVideoKeyMask] = useState("");
 
-  // 代理灵魂 (global_prompt) 与 默认提示词 (default_prompt)
+  // 代理灵魂（只读预览，来自有效灵魂预设）与 默认提示词
   const [globalPrompt, setGlobalPrompt] = useState("");
   const [defaultPrompt, setDefaultPrompt] = useState("");
-
-  // 出厂默认值（来自 /api/prompt-defaults，仅代理灵魂需要）
-  const [defaultSoul, setDefaultSoul] = useState("");
 
   const notify = useCallback((text: string, ok: boolean) => setMsg({ text, ok }), []);
 
@@ -65,35 +62,21 @@ export default function ProfileClient({ meName }: { meName: string }) {
     }
   }, [notify]);
 
-  const loadPromptDefaults = useCallback(async () => {
-    try {
-      const r = await fetch("/api/prompt-defaults", { cache: "no-store" });
-      if (!r.ok) return;
-      const d = await r.json();
-      if (d.success) {
-        setDefaultSoul(d.default_soul || "");
-      }
-    } catch {
-      /* non-critical, ignore */
-    }
-  }, []);
-
   useEffect(() => {
     void load();
-    void loadPromptDefaults();
-  }, [load, loadPromptDefaults]);
+  }, [load]);
 
   async function save() {
     setBusy(true);
     notify("", true);
     try {
-      // key 留空则不发送该字段（沿用现有语义，留空=不变）；url/model/global_prompt 原样发送。
+      // key 留空则不发送该字段（沿用现有语义，留空=不变）；url/model 原样发送。
+      // global_prompt 已改由灵魂预设管理，不再通过此处保存。
       const body: Record<string, unknown> = {
         text_api_url: textUrl,
         text_api_model: textModel,
         video_api_url: videoUrl,
         video_api_model: videoModel,
-        global_prompt: globalPrompt,
       };
       if (textKey.trim()) body.deepseek_api_key = textKey;
       if (videoKey.trim()) body.qwen_api_key = videoKey;
@@ -281,30 +264,21 @@ export default function ProfileClient({ meName }: { meName: string }) {
           </div>
 
           <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h2 className={styles.cardTitle}>代理灵魂</h2>
-              <button
-                type="button"
-                className={styles.btnGhost}
-                onClick={() => setGlobalPrompt(defaultSoul)}
-                disabled={!defaultSoul}
-              >
-                <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                  <path d="M3 3v5h5" />
-                </svg>
-                恢复默认
-              </button>
-            </div>
-            <textarea
-              className={styles.textarea}
-              placeholder="AI 人设 / 系统提示（可选），为空则使用系统默认人设"
-              value={globalPrompt}
-              onChange={(e) => setGlobalPrompt(e.target.value)}
-              rows={6}
-              spellCheck={false}
-            />
-            <p className={styles.hint}>定义 AI 的角色与风格，对所有文案生成生效。为空则回落到系统默认人设。</p>
+            <h2 className={styles.cardTitle}>代理灵魂</h2>
+            <p className={styles.hint}>当前选用灵魂预设的内容将作为 AI 的系统人设，对所有文案生成生效。</p>
+            {globalPrompt ? (
+              <p className={styles.presetPreview}>{globalPrompt.length > 120 ? globalPrompt.slice(0, 120) + "…" : globalPrompt}</p>
+            ) : (
+              <p className={styles.presetPreviewEmpty}>（尚未选用任何灵魂预设，将使用系统默认人设）</p>
+            )}
+            <a className={styles.btn} href="/presets">
+              <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 2a5 5 0 1 0 5 5" />
+                <path d="M12 12c-4.418 0-8 1.79-8 4v1h16v-1c0-2.21-3.582-4-8-4z" />
+                <path d="M17 2l5 5-5 5" />
+              </svg>
+              管理代理灵魂预设 →
+            </a>
           </div>
 
           <div className={styles.card}>

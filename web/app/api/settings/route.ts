@@ -3,13 +3,14 @@ import { z } from "zod";
 import { getCurrentUser, unauthorized, assertSameOrigin } from "@/lib/session";
 import { getUserSettings, saveUserSettings, maskKey } from "@/lib/user-settings";
 import { DEFAULT_GLOBAL_PROMPT } from "@/lib/prompts";
-import { getActivePresetContent } from "@/lib/presets";
+import { getActivePresetContent, getActiveSoulContent } from "@/lib/presets";
 
 export const dynamic = "force-dynamic";
 
 function buildResponse(
   s: Awaited<ReturnType<typeof getUserSettings>>,
   effectiveDefaultPrompt: string,
+  effectiveSoul: string,
 ) {
   const deepseek = maskKey(s.deepseek_api_key); // 文案 = deepseek
   const qwen = maskKey(s.qwen_api_key); // 视频 = qwen
@@ -18,7 +19,9 @@ function buildResponse(
   // can show the runtime default as a placeholder when empty.
   return NextResponse.json({
     success: true,
-    global_prompt: s.global_prompt || DEFAULT_GLOBAL_PROMPT,
+    // global_prompt = the EFFECTIVE 代理灵魂 (active soul preset → legacy
+    // global_prompt column), falling back to the backend default for preview.
+    global_prompt: effectiveSoul || DEFAULT_GLOBAL_PROMPT,
     default_prompt: effectiveDefaultPrompt,
     // Backward-compatible flags (homepage gate uses these).
     hasDeepseekKey: deepseek.has,
@@ -37,11 +40,12 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return unauthorized();
 
-  const [s, effectiveDefaultPrompt] = await Promise.all([
+  const [s, effectiveDefaultPrompt, effectiveSoul] = await Promise.all([
     getUserSettings(user.id),
     getActivePresetContent(user.id),
+    getActiveSoulContent(user.id),
   ]);
-  return buildResponse(s, effectiveDefaultPrompt);
+  return buildResponse(s, effectiveDefaultPrompt, effectiveSoul);
 }
 
 const SaveSchema = z.object({
@@ -85,9 +89,10 @@ export async function POST(req: Request) {
     defaultPrompt: body.default_prompt === undefined ? null : body.default_prompt,
   });
 
-  const [s, effectiveDefaultPrompt] = await Promise.all([
+  const [s, effectiveDefaultPrompt, effectiveSoul] = await Promise.all([
     getUserSettings(user.id),
     getActivePresetContent(user.id),
+    getActiveSoulContent(user.id),
   ]);
-  return buildResponse(s, effectiveDefaultPrompt);
+  return buildResponse(s, effectiveDefaultPrompt, effectiveSoul);
 }
