@@ -216,6 +216,135 @@ def build_deepseek_messages(
 
 
 
+# 「AI 帮写」三种操作的 user 提示词模板。expand/condense 目标固定、不考虑图片；
+# rewrite 由用户给出具体要求，且可附带 Qwen 对所选图片的分析作为参考上下文。
+AI_ASSIST_EXPAND_TEMPLATE = (
+    "请在保持原意、立场与语言风格不变的前提下，扩写下面这段文案，"
+    "使其更充实生动（仍是可直接发布的成稿，用 Markdown）：\n\n{text}"
+)
+AI_ASSIST_CONDENSE_TEMPLATE = (
+    "请在保持原意与风格不变的前提下，精炼缩短下面这段文案（用 Markdown）：\n\n{text}"
+)
+
+
+def build_ai_assist_messages(
+    mode: str,
+    selected_text: str,
+    requirement: str = "",
+    global_prompt: str | None = None,
+    image_analysis: str = "",
+) -> list[dict[str, str]]:
+    """Assemble the [system, user] messages for the 「AI 帮写」 (AI assist) feature.
+
+    system = active soul (or default) + the fixed Markdown output instruction, so
+    the rewritten/expanded/condensed text keeps the agent's persona and stays in
+    Markdown for round-tripping into the WYSIWYG editor. The user message depends
+    on ``mode``:
+
+    - ``expand``   : enrich the selection while preserving meaning/stance/style.
+    - ``condense`` : tighten/shorten the selection while preserving meaning/style.
+    - ``rewrite``  : rewrite per the user's ``requirement``; if ``image_analysis``
+      is supplied (Qwen's read of the images inside the selection) it is appended
+      as reference-only context.
+    """
+    system_prompt = (global_prompt or DEFAULT_GLOBAL_PROMPT).strip() + MARKDOWN_OUTPUT_INSTRUCTION
+    text = (selected_text or "").strip()
+    normalized_mode = (mode or "").strip().lower()
+
+    if normalized_mode == "expand":
+        user_prompt = AI_ASSIST_EXPAND_TEMPLATE.format(text=text)
+    elif normalized_mode == "condense":
+        user_prompt = AI_ASSIST_CONDENSE_TEMPLATE.format(text=text)
+    elif normalized_mode == "rewrite":
+        reference = (image_analysis or "").strip()
+        reference_block = (
+            (
+                "\n参考图片分析（仅作参考，不要编造图中没有的事实）：\n" + reference
+            )
+            if reference
+            else ""
+        )
+        user_prompt = (
+            "请按以下要求改写下面这段文案（保持与全文一致的语言风格，用 Markdown）。\n"
+            f"要求：{(requirement or '').strip()}"
+            f"{reference_block}\n\n"
+            f"原文案：\n{text}"
+        )
+    else:
+        raise ValueError(f"未知的 AI 帮写操作：{mode!r}")
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+def generate_ai_assist(
+    mode: str,
+    selected_text: str,
+    requirement: str = "",
+    global_prompt: str | None = None,
+    image_analysis: str = "",
+    api_key: str | None = None,
+    model: str | None = None,
+    api_url: str | None = None,
+    timeout: int = 45,
+) -> str:
+    """Run the 「AI 帮写」 expand/condense/rewrite operation via DeepSeek.
+
+    Returns the rewritten copy as plain text (Markdown). Reuses the same
+    endpoint normalization / DeepSeek request shape / content extraction as
+    :func:`generate_copy_with_deepseek` so the contract stays single-pathed.
+    """
+    load_project_env()
+    resolved_api_key = (api_key or "").strip()
+    if not resolved_api_key:
+        raise RuntimeError("DeepSeek API Key 未填写")
+
+    if not (selected_text or "").strip():
+        raise RuntimeError("没有选中可供改写的文案")
+
+    messages = build_ai_assist_messages(
+        mode=mode,
+        selected_text=selected_text,
+        requirement=requirement,
+        global_prompt=global_prompt,
+        image_analysis=image_analysis,
+    )
+
+    endpoint = _normalize_chat_endpoint(api_url)
+    resolved_model = (model or os.getenv("DEEPSEEK_MODEL") or DEFAULT_DEEPSEEK_MODEL).strip()
+    body = {
+        "model": resolved_model,
+        "messages": messages,
+        "temperature": 0.72,
+        "max_tokens": 1200,
+        "stream": False,
+    }
+    request = Request(
+        endpoint,
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {resolved_api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            return _extract_deepseek_content(payload)
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"DeepSeek 调用失败：HTTP {exc.code} {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"DeepSeek 网络请求失败：{exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("DeepSeek 返回了无法解析的 JSON") from exc
+
+
 def _extract_deepseek_content(payload: dict[str, Any]) -> str:
     choices = payload.get("choices") or []
     if not choices:

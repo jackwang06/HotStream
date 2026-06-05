@@ -318,6 +318,63 @@
     .rt-btn#formatPainter[data-active="1"] { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
     .preview-doc.painting { cursor: crosshair; }
 
+    /* ── AI 帮写：工具栏入口 + 下拉动作菜单 ── */
+    .rt-ai-wrap { position: relative; display: inline-flex; }
+    .rt-ai-btn { gap: 6px; }
+    .rt-ai-btn .rt-ai-label { font-size: 13px; font-weight: 700; }
+    .rt-ai-btn:not(:disabled) { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+    .rt-ai-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .rt-ai-btn[aria-expanded="true"] { background: var(--primary); color: var(--on-accent); border-color: var(--primary); }
+    .rt-ai-btn.busy { pointer-events: none; opacity: .75; }
+    .rt-ai-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 30;
+      min-width: 230px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: var(--shadow-menu);
+    }
+    .rt-ai-menu[hidden] { display: none; }
+    .rt-ai-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      color: var(--text);
+      background: transparent;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .rt-ai-item:hover { border-color: var(--border); background: var(--surface-2); }
+    .rt-ai-item .rt-ai-sub { color: var(--muted); font-size: 11px; font-weight: 500; }
+    .rt-ai-rewrite { display: grid; gap: 8px; margin-top: 4px; padding: 8px; border-top: 1px solid var(--border); }
+    .rt-ai-rewrite[hidden] { display: none; }
+    .rt-ai-req { min-height: 52px; padding: 8px 10px; font-size: 13px; line-height: 1.5; }
+    .rt-ai-rewrite-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .rt-ai-go, .rt-ai-cancel {
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .rt-ai-go { color: var(--on-accent); background: var(--primary); border-color: var(--primary); }
+    .rt-ai-go:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+    .rt-ai-cancel { color: var(--text); background: var(--surface-2); }
+    .rt-ai-cancel:hover { background: var(--surface-3); }
+
     .image-block-body { padding: 12px; }
     .image-block-body img {
       display: block;
@@ -629,6 +686,26 @@
             <button class="rt-btn" id="insertPageBreak" title="插入分页符：导出长图时此处会切成下一张图" aria-label="插入分页符">
               <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
             </button>
+          </div>
+          <div class="rt-group rt-ai-group">
+            <div class="rt-ai-wrap">
+              <button type="button" class="rt-btn rt-ai-btn" id="aiAssistBtn" title="AI 帮写：先选中要处理的文案，再选择扩写 / 缩写 / 改写" aria-label="AI 帮写" aria-haspopup="true" aria-expanded="false" disabled>
+                <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/><path d="M9 12a6 6 0 0 0 6-6 6 6 0 0 0 6 6 6 6 0 0 0-6 6 6 6 0 0 0-6-6z"/></svg>
+                <span class="rt-ai-label">AI 帮写</span>
+              </button>
+              <div class="rt-ai-menu" id="aiAssistMenu" role="menu" aria-label="AI 帮写动作" hidden>
+                <button type="button" class="rt-ai-item" data-ai-mode="expand" role="menuitem">扩写<span class="rt-ai-sub">让所选文字更充实生动</span></button>
+                <button type="button" class="rt-ai-item" data-ai-mode="condense" role="menuitem">缩写<span class="rt-ai-sub">把所选文字精炼缩短</span></button>
+                <button type="button" class="rt-ai-item" data-ai-mode="rewrite" role="menuitem">改写…<span class="rt-ai-sub">按你的要求重写所选文字</span></button>
+                <div class="rt-ai-rewrite" id="aiRewriteBox" hidden>
+                  <textarea id="aiRewriteReq" class="rt-ai-req" rows="2" placeholder="改写要求，例如：更口语化、突出性价比、加一句行动号召……"></textarea>
+                  <div class="rt-ai-rewrite-actions">
+                    <button type="button" class="rt-ai-go" id="aiRewriteGo">开始改写</button>
+                    <button type="button" class="rt-ai-cancel" id="aiRewriteCancel">取消</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="preview-wrap">
@@ -1686,6 +1763,242 @@
     const insertPageBreakBtn = document.getElementById('insertPageBreak');
     insertPageBreakBtn.addEventListener('mousedown', e => { e.preventDefault(); rememberSelection(); });
     insertPageBreakBtn.addEventListener('click', insertPageBreak);
+
+    // ── AI 帮写（扩写 / 缩写 / 改写）：作用于 previewDoc 当前非空选区 ──
+    const aiAssistBtn = document.getElementById('aiAssistBtn');
+    const aiAssistMenu = document.getElementById('aiAssistMenu');
+    const aiRewriteBox = document.getElementById('aiRewriteBox');
+    const aiRewriteReq = document.getElementById('aiRewriteReq');
+    const aiRewriteGo = document.getElementById('aiRewriteGo');
+    const aiRewriteCancel = document.getElementById('aiRewriteCancel');
+    let aiBusy = false;
+
+    // 把 /api/proxy-image?url=<原图> 还原成原始 url，便于 Qwen 直接读取外链；
+    // data: 或本身就是外链则原样返回。
+    function unproxyImageUrl(url) {
+      const raw = String(url || '');
+      if (!raw) return '';
+      const m = raw.match(/[?&]url=([^&]+)/);
+      if (raw.indexOf('/api/proxy-image') !== -1 && m) {
+        try { return decodeURIComponent(m[1]); } catch (e) { return raw; }
+      }
+      return raw;
+    }
+
+    // 当前 previewDoc 内是否存在非空选区（决定「AI 帮写」是否可用）。
+    function previewHasSelection() {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && !sel.isCollapsed && previewDoc.contains(sel.anchorNode) && previewDoc.contains(sel.focusNode)) {
+        return !sel.getRangeAt(0).collapsed;
+      }
+      // 失焦后用记忆的选区兜底
+      if (savedSelection && !savedSelection.collapsed && previewDoc.contains(savedSelection.startContainer)) {
+        return true;
+      }
+      return false;
+    }
+
+    function refreshAiAvailability() {
+      const ok = previewHasSelection() && !aiBusy;
+      aiAssistBtn.disabled = !ok;
+      if (!ok) closeAiMenu();
+    }
+
+    function closeAiMenu() {
+      aiAssistMenu.hidden = true;
+      aiAssistBtn.setAttribute('aria-expanded', 'false');
+      aiRewriteBox.hidden = true;
+    }
+
+    function openAiMenu() {
+      if (aiAssistBtn.disabled) return;
+      aiAssistMenu.hidden = false;
+      aiAssistBtn.setAttribute('aria-expanded', 'true');
+      aiRewriteBox.hidden = true;
+    }
+
+    // 取「待处理选区」：返回 {range, markdown, images[]}。
+    // markdown 来自 选区 HTML → turndown；images 来自选区内 <img> 的（还原后的）src。
+    function captureAiSelection() {
+      restoreSelection();
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return null;
+      const range = sel.getRangeAt(0);
+      if (range.collapsed || !previewDoc.contains(range.commonAncestorContainer)) return null;
+      const frag = range.cloneContents();
+      const holder = document.createElement('div');
+      holder.appendChild(frag);
+      // 收集选区内图片 url（去重、还原代理）
+      const images = [];
+      holder.querySelectorAll('img').forEach(img => {
+        const src = unproxyImageUrl(img.getAttribute('src') || '');
+        if (src && images.indexOf(src) === -1) images.push(src);
+      });
+      // 图片已单独收进 images 数组；从源里剔除 figure/img，避免图片 markdown
+      // 混进发给 DeepSeek 的文字（防代理图链泄漏、避免输出里冒出多余 ![](...)）。
+      holder.querySelectorAll('figure, img').forEach(n => n.remove());
+      // 选区 HTML → markdown（仅文字部分；图片在回填时单独保留处理）
+      const markdown = inlineHtmlToMd(holder.innerHTML);
+      return { range: range.cloneRange(), markdown, images };
+    }
+
+    // 把 AI 返回的 markdown 渲染成「顶层块元素」节点数组（与 renderPreview 一致的块模型）。
+    function aiMarkdownToNodes(md) {
+      const newBlocks = markdownToBlocks(md).map(b => normalizeBlock(b));
+      const wrap = document.createElement('div');
+      wrap.innerHTML = newBlocks.map(blockToElementHtml).join('') || '<p><br></p>';
+      return Array.from(wrap.childNodes);
+    }
+
+    function setAiBusy(on) {
+      aiBusy = on;
+      aiAssistBtn.classList.toggle('busy', on);
+      aiAssistBtn.disabled = on || !previewHasSelection();
+      [aiRewriteGo, aiRewriteCancel].forEach(b => { if (b) b.disabled = on; });
+      aiAssistMenu.querySelectorAll('.rt-ai-item').forEach(b => { b.disabled = on; });
+    }
+
+    async function runAiAssist(mode, requirement) {
+      if (aiBusy) return;
+      const captured = captureAiSelection();
+      if (!captured || !captured.markdown.trim()) {
+        showToast('请先选中要处理的文案');
+        closeAiMenu();
+        return;
+      }
+      setAiBusy(true);
+      showToast('AI 生成中…');
+      const payload = { mode, text: captured.markdown };
+      if (mode === 'rewrite') {
+        payload.requirement = requirement || '';
+        if (captured.images.length) payload.images = captured.images;
+      }
+      let data = null;
+      try {
+        const res = await fetch('/api/ai-assist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        data = await res.json().catch(() => null);
+        if (!res.ok || !data || !data.success) {
+          throw new Error((data && data.error) || 'AI 生成失败，请稍后再试');
+        }
+      } catch (err) {
+        setAiBusy(false);
+        showToast('AI 生成失败：' + (err && err.message ? err.message : '请稍后再试'));
+        return;
+      }
+
+      const resultMd = String(data.text || '').trim();
+      if (!resultMd) {
+        setAiBusy(false);
+        showToast('AI 没有返回内容');
+        return;
+      }
+
+      // ── 用返回 markdown 替换选区「文字部分」，并保留选区内原有图片 figure ──
+      try {
+        if (previewDoc.getAttribute('data-empty') === '1') previewDoc.removeAttribute('data-empty');
+        restoreSelection();
+        const sel = window.getSelection();
+        let range = captured.range;
+        if (sel && sel.rangeCount && previewDoc.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+          range = sel.getRangeAt(0);
+        }
+        // 1) 先把选区内原有的图片 figure 抽出来保留（克隆 outerHTML，避免删除时丢失）
+        const preserved = [];
+        const selFrag = range.cloneContents();
+        const figProbe = document.createElement('div');
+        figProbe.appendChild(selFrag);
+        figProbe.querySelectorAll('figure').forEach(f => preserved.push(f.outerHTML));
+
+        // 2) 删除选区内容，得到一个折叠的插入点
+        range.deleteContents();
+
+        // 3) 构造替换内容：先文字块，后保留的图片 figure
+        const nodes = aiMarkdownToNodes(resultMd);
+        if (preserved.length) {
+          const figWrap = document.createElement('div');
+          figWrap.innerHTML = preserved.join('');
+          Array.from(figWrap.querySelectorAll('figure')).forEach(f => {
+            // 重新生成 block-id，避免与文档其它块的 id 冲突
+            f.dataset.blockId = makeId('image');
+            nodes.push(f);
+          });
+        }
+
+        // 4) 在插入点插入（保持顺序）；记录尾节点用于落点
+        const insertFrag = document.createDocumentFragment();
+        nodes.forEach(n => insertFrag.appendChild(n));
+        const lastNode = insertFrag.lastChild;
+        range.insertNode(insertFrag);
+
+        // 5) 把光标落到插入内容之后
+        if (lastNode) {
+          const after = document.createRange();
+          after.setStartAfter(lastNode);
+          after.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(after);
+          savedSelection = after.cloneRange();
+        }
+
+        // 6) 重新绑定图片工具、回写块模型、进历史、保存
+        wireFigureTools();
+        syncBlocksFromDom();
+        if (typeof pushHistoryNow === 'function') pushHistoryNow();
+        saveDraft({ silent: true });
+        const label = mode === 'expand' ? '已扩写' : (mode === 'condense' ? '已缩写' : '已改写');
+        showToast(label + '所选文案' + (preserved.length ? '（图片已保留）' : ''));
+      } catch (err) {
+        showToast('替换失败：' + (err && err.message ? err.message : '请重试'));
+      } finally {
+        setAiBusy(false);
+        closeAiMenu();
+        aiRewriteReq.value = '';
+        refreshAiAvailability();
+      }
+    }
+
+    // 入口按钮：mousedown 时记忆当前选区（避免点击工具栏丢失），click 开关菜单
+    aiAssistBtn.addEventListener('mousedown', e => { e.preventDefault(); rememberSelection(); });
+    aiAssistBtn.addEventListener('click', () => {
+      if (aiAssistMenu.hidden) openAiMenu(); else closeAiMenu();
+    });
+    // 菜单内按钮也要在 mousedown 时保住选区
+    aiAssistMenu.addEventListener('mousedown', e => {
+      // textarea 需要正常获取焦点编辑；其余按钮阻止默认以保留 previewDoc 选区
+      if (e.target !== aiRewriteReq) { e.preventDefault(); rememberSelection(); }
+    });
+    aiAssistMenu.querySelectorAll('.rt-ai-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const mode = item.dataset.aiMode;
+        if (mode === 'rewrite') {
+          aiRewriteBox.hidden = false;
+          setTimeout(() => aiRewriteReq.focus(), 0);
+          return;
+        }
+        runAiAssist(mode, '');
+      });
+    });
+    aiRewriteGo.addEventListener('click', () => {
+      const req = aiRewriteReq.value.trim();
+      if (!req) { showToast('请填写改写要求'); aiRewriteReq.focus(); return; }
+      runAiAssist('rewrite', req);
+    });
+    aiRewriteCancel.addEventListener('click', () => { aiRewriteBox.hidden = true; aiRewriteReq.value = ''; });
+    // 点击菜单外区域关闭
+    document.addEventListener('mousedown', e => {
+      if (!aiAssistMenu.hidden && !aiAssistMenu.contains(e.target) && e.target !== aiAssistBtn && !aiAssistBtn.contains(e.target)) {
+        closeAiMenu();
+      }
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !aiAssistMenu.hidden) closeAiMenu(); });
+    // 选区变化时刷新可用性（依赖已有的 selection 事件）
+    previewDoc.addEventListener('keyup', refreshAiAvailability);
+    previewDoc.addEventListener('mouseup', refreshAiAvailability);
+    document.addEventListener('selectionchange', () => { if (document.activeElement === previewDoc) refreshAiAvailability(); });
 
     const fontNameSelect = document.getElementById('fontName');
     fontNameSelect.addEventListener('mousedown', rememberSelection);

@@ -145,6 +145,89 @@ def _build_qwen_messages(topic: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _build_qwen_image_analysis_messages(image_urls: list[str]) -> list[dict[str, Any]]:
+    """Build [system, user] messages asking Qwen to objectively describe images.
+
+    Each image is passed as an OpenAI/DashScope-compatible ``image_url`` part;
+    the trailing text part requests a brief, factual description usable as
+    copywriting context (scene / visible elements / facts), no fabrication.
+    """
+    user_content: list[dict[str, Any]] = []
+    for url in image_urls:
+        normalized = _normalize_image_url(url)
+        if normalized:
+            user_content.append({"type": "image_url", "image_url": {"url": normalized}})
+    user_content.append({
+        "type": "text",
+        "text": (
+            "请对以上图片做简要、客观的分析，供文案改写参考。"
+            "说明每张图片的场景、可见要素，以及可用于文案的客观事实。"
+            "只描述图中确实可见的内容，不要编造图中没有的事实、地点或人物言论。"
+            "用简洁中文分点输出即可。"
+        ),
+    })
+    return [
+        {"role": "system", "content": [{"type": "text", "text": "你是谨慎的图片内容分析助手，只输出图中确实可见的客观事实。"}]},
+        {"role": "user", "content": user_content},
+    ]
+
+
+def analyze_images_with_qwen(
+    image_urls: list[str],
+    api_key: str | None = None,
+    model: str | None = None,
+    timeout: int = 60,
+    api_url: str | None = None,
+) -> str:
+    """Analyze one or more images with Qwen-VL and return merged analysis text.
+
+    Used by the 「AI 帮写 · 改写」 flow: the editor selection may contain images
+    that must stay untouched; Qwen reads them (analysis only) to provide context
+    for DeepSeek's rewrite. Raises ``RuntimeError`` on missing key / no usable
+    images / API failure. Reuses ``_normalize_chat_endpoint`` /
+    ``_extract_qwen_content``.
+    """
+    resolved_api_key = (api_key or "").strip()
+    if not resolved_api_key:
+        raise RuntimeError("Qwen API Key 未填写")
+    normalized_urls = [_normalize_image_url(url) for url in (image_urls or [])]
+    normalized_urls = [url for url in normalized_urls if url]
+    if not normalized_urls:
+        raise RuntimeError("没有可供分析的图片")
+
+    endpoint = _normalize_chat_endpoint(api_url)
+    resolved_model = (model or DEFAULT_QWEN_MODEL).strip()
+    body = {
+        "model": resolved_model,
+        "messages": _build_qwen_image_analysis_messages(normalized_urls),
+        "temperature": 0.2,
+        "max_tokens": 1200,
+        "stream": False,
+    }
+    request = Request(
+        endpoint,
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {resolved_api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Qwen 调用失败：HTTP {exc.code} {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Qwen 网络请求失败：{exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Qwen 返回了无法解析的 JSON") from exc
+
+    return _extract_qwen_content(payload)
+
+
 def analyze_video_with_qwen(
     topic: dict[str, Any],
     api_key: str | None = None,

@@ -15,11 +15,12 @@ from hotstream.copywriter import (
     DEFAULT_GLOBAL_PROMPT,
     DEFAULT_PROMPT_TEMPLATE,
     build_default_temporary_prompt,
+    generate_ai_assist,
     generate_copy_with_deepseek,
 )
 from hotstream.image_scraper import build_custom_topic, fetch_related_images
 from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics
-from hotstream.video_analyzer import analyze_video_with_qwen
+from hotstream.video_analyzer import analyze_images_with_qwen, analyze_video_with_qwen
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # Single frontend source: the production-served files under web/legacy/. The
@@ -282,6 +283,82 @@ def build_video_analysis_response(raw_body: bytes) -> tuple[int, dict[str, str],
         return 502, headers, _json_bytes({"success": False, "error": str(exc), "analysis": {}, "images": []})
 
 
+def build_ai_assist_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
+    """Build the /api/ai-assist JSON response for the editor's 「AI 帮写」 feature.
+
+    Parses ``mode``/``text``/``requirement``/``images`` plus the injected
+    credentials (DeepSeek for the rewrite, Qwen for image analysis) and the
+    active soul (``global_prompt``). When ``mode == 'rewrite'`` and the selection
+    contains images, Qwen analyzes them first (analysis only) and the result is
+    threaded into DeepSeek as reference context. Returns ``{success, text}``.
+    """
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+    }
+    try:
+        payload = json.loads(raw_body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return 400, headers, _json_bytes({"success": False, "error": "请求 JSON 格式不正确"})
+
+    mode = str(payload.get("mode") or "").strip().lower()
+    text = str(payload.get("text") or "")
+    requirement = str(payload.get("requirement") or "")
+    images = [str(url).strip() for url in payload.get("images") or [] if str(url).strip()]
+    global_prompt = str(payload.get("global_prompt") or "").strip() or None
+
+    api_key = str(payload.get("api_key") or "").strip()
+    api_url = str(payload.get("api_url") or "").strip() or None
+    model = str(payload.get("model") or "").strip() or None
+
+    qwen_api_key = str(payload.get("qwen_api_key") or "").strip()
+    qwen_api_url = str(payload.get("qwen_api_url") or "").strip() or None
+    qwen_model = str(payload.get("qwen_model") or "").strip() or None
+
+    if mode not in {"expand", "condense", "rewrite"}:
+        return 400, headers, _json_bytes({"success": False, "error": "未知的 AI 帮写操作"})
+    if not text.strip():
+        return 400, headers, _json_bytes({"success": False, "error": "请先选中要处理的文案"})
+    if mode == "rewrite" and not requirement.strip():
+        return 400, headers, _json_bytes({"success": False, "error": "请填写改写的具体要求"})
+    if not api_key:
+        return 400, headers, _json_bytes({"success": False, "error": "请先在设置里配置文案生成 API Key"})
+
+    try:
+        image_analysis = ""
+        if mode == "rewrite" and images:
+            try:
+                image_analysis = analyze_images_with_qwen(
+                    image_urls=images,
+                    api_key=qwen_api_key,
+                    model=qwen_model,
+                    api_url=qwen_api_url,
+                )
+            except Exception:
+                # Image analysis is best-effort context; if Qwen fails (no key,
+                # network, etc.) fall back to rewriting on text alone.
+                image_analysis = ""
+
+        kwargs: dict[str, Any] = {
+            "mode": mode,
+            "selected_text": text,
+            "requirement": requirement,
+            "image_analysis": image_analysis,
+            "api_key": api_key,
+        }
+        if global_prompt is not None:
+            kwargs["global_prompt"] = global_prompt
+        if api_url is not None:
+            kwargs["api_url"] = api_url
+        if model is not None:
+            kwargs["model"] = model
+
+        result_text = generate_ai_assist(**kwargs)
+        return 200, headers, _json_bytes({"success": True, "text": result_text})
+    except Exception as exc:
+        return 502, headers, _json_bytes({"success": False, "error": str(exc), "text": ""})
+
+
 def build_proxy_image_response(image_url: str, timeout: int = 12) -> tuple[int, dict[str, str], bytes]:
     """Fetch a remote image and return it from the same origin for canvas export."""
     json_headers = {
@@ -427,7 +504,7 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler method name
         parsed = urlparse(self.path)
-        if parsed.path in {"/api/generate-copy", "/api/prompts", "/api/analyze-video", "/api/settings", "/api/drafts", "/api/history"}:
+        if parsed.path in {"/api/generate-copy", "/api/prompts", "/api/analyze-video", "/api/ai-assist", "/api/settings", "/api/drafts", "/api/history"}:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -437,6 +514,8 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
                 status, headers, body = build_prompts_response(raw_body)
             elif parsed.path == "/api/analyze-video":
                 status, headers, body = build_video_analysis_response(raw_body)
+            elif parsed.path == "/api/ai-assist":
+                status, headers, body = build_ai_assist_response(raw_body)
             elif parsed.path == "/api/settings":
                 status, headers, body = build_settings_save_response(raw_body)
             elif parsed.path == "/api/drafts":
