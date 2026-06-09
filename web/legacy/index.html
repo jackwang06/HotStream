@@ -830,6 +830,7 @@
     let lastVideoAnalysis = null;
     let lastVideoImages = [];
     let lastAnalyzedVideoUrl = '';
+    let curatedActive = false;  // 处于精选热点模式（60s 静默刷新不覆盖精选结果）
     const topicList = document.getElementById('topicList');
     const output = document.getElementById('copyOutput');
     const imageSection = document.getElementById('imageSection');
@@ -881,9 +882,19 @@
       return selectedTopic.source === '自定义' && !!selectedTopic.has_video;
     }
 
-    // 是否允许（并需要）做视频分析：视频源，或自定义链接且检测到视频。
+    // 选中条目是否有封面可供 Qwen 分析（B站/抖音 的封面字段）。
+    function hasCoverForAnalysis(t) {
+      return !!(t && (t.cover || t.pic || t.thumbnail));
+    }
+
+    // 是否“可以”做视频分析（与“是否必须”分开——必须看 selectedHasVideo()）：
+    // 普通 B站/抖音 视频源、自定义检测到视频，以及视频类精选条目(B站/抖音且有封面，可选分析)。
     function canAnalyzeVideo() {
-      return isVideoMode() || (selectedTopic && selectedTopic.source === '自定义' && !!selectedTopic.has_video);
+      if (!selectedTopic) return false;
+      if (selectedHasVideo()) return true;  // 普通视频源 / 自定义有视频（这批同时也是“必须”分析）
+      return !!selectedTopic.curated
+        && ['B站', '抖音'].includes(selectedTopic.source)
+        && hasCoverForAnalysis(selectedTopic);
     }
 
     function resetVideoAnalysis(text = '选择 B站/抖音视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。') {
@@ -1081,10 +1092,17 @@
     async function fetchHotTopics({ silent = false } = {}) {
       // 自定义链接模式不抓热榜（包括 60s 自动刷新也跳过）。
       if (isCustomMode()) return;
+      // 精选模式下，60s 静默自动刷新不要冲掉精选结果；只有用户手动刷新/切源才离开精选。
+      if (silent && curatedActive) return;
+      if (!silent) curatedActive = false;
       // 精选(curated)条目不属于任何单源热榜列表；抓热榜时丢弃残留的精选选择，
       // 避免它在列表被替换后成为悬挂引用、把过期的幽灵 topic 送往后端。
       // （正常单源选择不受影响，仍由下方保活块跨静默刷新保留。）
-      if (selectedTopic && selectedTopic.curated) selectedTopic = null;
+      if (selectedTopic && selectedTopic.curated) {
+        selectedTopic = null;
+        // 视频类精选曾展开过分析面板；离开精选且当前非视频源时收起并清残留。
+        if (!isVideoMode()) { videoAnalysisPanel.classList.add('hidden'); resetVideoAnalysis(); }
+      }
       const source = sourceSelect.value;
       const sourceLabel = currentSourceLabel();
       fetchBtn.disabled = true;
@@ -1155,6 +1173,7 @@
         curatedTopics.forEach((t, i) => { t.rank = i + 1; t.curated = true; });
         // Replace global topics so generate flow picks up the selected topic.
         topics = curatedTopics;
+        curatedActive = true;  // 进入精选模式：阻止 60s 静默刷新冲掉精选结果
 
         fetchMeta.textContent = `AI 精选了 ${curatedTopics.length} 条跨平台热点 · 可直接选中生成文案`;
 
@@ -1184,7 +1203,15 @@
           document.querySelectorAll('.topic').forEach(el => el.classList.remove('selected'));
           item.classList.add('selected');
           selectedTopic = newTopic;
-          if (changed) resetVideoAnalysis('已选择热点。精选热点不支持视频分析，可直接生成文案。');
+          if (changed) {
+            resetVideoAnalysis();
+            // 视频类精选条目(B站/抖音且有封面)：显示「分析视频」面板，分析可选。
+            const analyzable = canAnalyzeVideo();
+            videoAnalysisPanel.classList.toggle('hidden', !analyzable);
+            if (analyzable) {
+              videoAnalysisOutput.textContent = '可点「分析所选视频」用封面+标题等公开信息辅助生成（可选）；不分析也能直接生成文案。';
+            }
+          }
           showToast('已选择精选热点');
         }
 
@@ -1293,9 +1320,9 @@
     }
 
     analyzeVideoBtn.addEventListener('click', async () => {
-      // canAnalyzeVideo() 看的是来源模式/has_video；selectedHasVideo() 才会对精选
-      // (curated) 条目短路返回 false——后者是真正阻止精选条目走视频分析的关键门控。
-      if (!selectedTopic || !canAnalyzeVideo() || !selectedHasVideo()) {
+      // canAnalyzeVideo() 是“能否分析”的权威判定（已含视频类精选条目）；
+      // selectedHasVideo() 只表示“是否必须”，不再用于拦截分析按钮。
+      if (!selectedTopic || !canAnalyzeVideo()) {
         showToast('请先选择一个视频');
         return;
       }
