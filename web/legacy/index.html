@@ -790,6 +790,7 @@
             <div class="video-analysis hidden" id="videoAnalysisPanel">
               <button class="ghost-btn" id="analyzeVideoBtn" type="button">用 Qwen2.5-VL 分析所选视频</button>
               <div class="video-analysis-output" id="videoAnalysisOutput">选择 B站/抖音视频后，先用 Qwen2.5-VL 分析封面/公开信息，再交给 DeepSeek 生成前山牧场四季牧歌推文。</div>
+              <textarea id="videoAnalysisEdit" class="hidden" rows="6" placeholder="模型推断的视频内容（可编辑）——生成文案会基于这里的内容" style="width:100%;margin-top:8px;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:0.9em;line-height:1.6;resize:vertical;box-sizing:border-box;font-family:inherit;"></textarea>
             </div>
             <div class="prompt-field">
               <label for="temporaryPrompt">本次提示词</label>
@@ -830,6 +831,7 @@
     let lastVideoAnalysis = null;
     let lastVideoImages = [];
     let lastAnalyzedVideoUrl = '';
+    let lastVideoAnalysisText = '';  // 用户可编辑的「视频内容推断」文本；非空表示已分析、生成时据此
     let curatedActive = false;  // 处于精选热点模式（60s 静默刷新不覆盖精选结果）
     const topicList = document.getElementById('topicList');
     const output = document.getElementById('copyOutput');
@@ -848,6 +850,11 @@
     const analyzeVideoBtn = document.getElementById('analyzeVideoBtn');
     const videoAnalysisPanel = document.getElementById('videoAnalysisPanel');
     const videoAnalysisOutput = document.getElementById('videoAnalysisOutput');
+    const videoAnalysisEdit = document.getElementById('videoAnalysisEdit');
+    // 用户编辑可编辑框时实时同步快照，避免重选同一已分析条目时用旧文本覆盖掉编辑。
+    if (videoAnalysisEdit) {
+      videoAnalysisEdit.addEventListener('input', () => { lastVideoAnalysisText = videoAnalysisEdit.value.trim(); });
+    }
     const temporaryPromptInput = document.getElementById('temporaryPrompt');
     const EDIT_IMPORT_KEY = 'hotstream.editorDraft';
     const EDIT_LIVE_KEY = 'hotstream.editorLiveDraft';
@@ -901,7 +908,18 @@
       lastVideoAnalysis = null;
       lastVideoImages = [];
       lastAnalyzedVideoUrl = '';
+      lastVideoAnalysisText = '';
       videoAnalysisOutput.textContent = text;
+      if (videoAnalysisEdit) { videoAnalysisEdit.value = ''; videoAnalysisEdit.classList.add('hidden'); }
+    }
+
+    // 显示「视频内容推断」可编辑文本框（text 为空则隐藏）。生成时以框内当前值为准。
+    function showVideoAnalysisText(text, metaLabel) {
+      lastVideoAnalysisText = (text || '').trim();
+      if (metaLabel) videoAnalysisOutput.textContent = metaLabel;
+      if (!videoAnalysisEdit) return;
+      videoAnalysisEdit.value = lastVideoAnalysisText;
+      videoAnalysisEdit.classList.toggle('hidden', !lastVideoAnalysisText);
     }
 
     function updateSourceModeUI() {
@@ -1055,7 +1073,7 @@
         // copy in the output box is never cleared here — it is replaced only by a
         // brand-new generation.
         if (lastVideoAnalysis && lastAnalyzedVideoUrl && newKey === lastAnalyzedVideoUrl) {
-          renderVideoAnalysis(lastVideoAnalysis);
+          showVideoAnalysisText(lastVideoAnalysisText);  // 恢复已分析的可编辑推断文本
         } else if (changed) {
           resetVideoAnalysis(isVideoMode() ? '已选择视频。请填写 Qwen API Key 后点击“分析所选视频”。' : '切换到 B站/抖音视频后，可先分析视频内容。');
         }
@@ -1304,11 +1322,9 @@
       showToast('已恢复为默认提示词');
     });
 
-    function renderVideoAnalysis(analysis) {
-      if (!analysis) {
-        videoAnalysisOutput.textContent = '暂无视频分析结果。';
-        return;
-      }
+    // 把 Qwen 结构化分析转成可读文本（仅作 inferred/raw_text 都缺失时的降级填充）。
+    function analysisToText(analysis) {
+      if (!analysis) return '';
       const lines = [];
       if (analysis.summary) lines.push(`概述：${analysis.summary}`);
       if (Array.isArray(analysis.visual_keywords) && analysis.visual_keywords.length) lines.push(`视觉关键词：${analysis.visual_keywords.join('、')}`);
@@ -1316,7 +1332,7 @@
       if (Array.isArray(analysis.audience_emotion) && analysis.audience_emotion.length) lines.push(`受众情绪：${analysis.audience_emotion.join('、')}`);
       if (Array.isArray(analysis.usable_facts) && analysis.usable_facts.length) lines.push(`可用事实：${analysis.usable_facts.join('、')}`);
       if (Array.isArray(analysis.risks) && analysis.risks.length) lines.push(`风险提醒：${analysis.risks.join('、')}`);
-      videoAnalysisOutput.textContent = lines.join('\n') || JSON.stringify(analysis, null, 2);
+      return lines.join('\n');
     }
 
     analyzeVideoBtn.addEventListener('click', async () => {
@@ -1332,7 +1348,7 @@
       }
       analyzeVideoBtn.disabled = true;
       analyzeVideoBtn.textContent = 'Qwen 正在分析视频...';
-      videoAnalysisOutput.textContent = 'Qwen2.5-VL 正在分析视频封面、标题、简介和公开流量数据...';
+      videoAnalysisOutput.textContent = '① Qwen 看封面/标题/简介 → ② 联网检索头条/百度/知乎 → ③ DeepSeek 还原视频内容，请稍候…';
       try {
         const response = await fetch('/api/analyze-video', {
           method: 'POST',
@@ -1344,7 +1360,15 @@
         lastVideoAnalysis = payload.analysis || {};
         lastVideoImages = payload.images || [];
         lastAnalyzedVideoUrl = topicKey(selectedTopic);
-        renderVideoAnalysis(lastVideoAnalysis);
+        // 优先用 DeepSeek 还原的全貌 → 降级 Qwen 概况文本 → 再降级结构化字段。
+        const inferred = (payload.inferred || '').trim()
+          || (payload.raw_text || payload.overview || '').trim()
+          || analysisToText(lastVideoAnalysis);
+        const hit = Array.isArray(payload.sources_hit) ? payload.sources_hit : [];
+        const label = hit.length
+          ? `以下为模型推断的视频内容（封面 + 联网检索:${hit.join('/')} + 模型还原，可能与真实有出入）。可直接编辑，生成文案将基于此。`
+          : '以下为模型推断的视频内容（基于封面/标题，可能与真实有出入）。可直接编辑，生成文案将基于此。';
+        showVideoAnalysisText(inferred, label);
         if (lastVideoImages.length) renderImages(lastVideoImages);
         showToast('视频分析完成');
       } catch (error) {
@@ -1440,7 +1464,11 @@
           body: JSON.stringify({
             topic: selectedTopic,
             default_prompt: temporaryPromptInput.value.trim(),
-            qwen_analysis: lastVideoAnalysis,
+            // 把用户编辑后的「视频内容推断」逐字发给后端（_format_qwen_analysis 优先采用 edited_text）；
+            // 没分析过则为 null，生成走纯热点+知识库。
+            qwen_analysis: (videoAnalysisEdit && videoAnalysisEdit.value.trim())
+              ? { edited_text: videoAnalysisEdit.value.trim() }
+              : null,
             source_images: lastVideoImages
           })
         });

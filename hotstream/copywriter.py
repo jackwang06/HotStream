@@ -105,6 +105,15 @@ def _format_list_or_json(value: Any) -> str:
 def _format_qwen_analysis(qwen_analysis: dict[str, Any] | None) -> str:
     if not qwen_analysis:
         return ""
+    # 用户在前端编辑过的「视频内容推断」文本（或 DeepSeek 还原出的全貌）：逐字采用，
+    # 确保 DeepSeek 文案生成收到的就是用户认可的版本。
+    edited = str(qwen_analysis.get("edited_text") or qwen_analysis.get("inferred") or "").strip()
+    if edited:
+        return (
+            "视频内容推断（综合封面+联网检索+模型还原，可能与真实视频有出入）：\n"
+            + edited
+            + "\n请把以上推断作为借势素材，紧扣其中内容写作，不要编造其中未提及的事实。"
+        )
     lines = ["Qwen2.5-VL 视频分析："]
     for key, label in [
         ("summary", "内容概述"),
@@ -543,6 +552,89 @@ def select_relevant_topics(
         if len(results) >= CURATED_TOPICS_MAX:
             break
     return results
+
+
+def _build_video_restore_messages(
+    title: str,
+    source: str,
+    overview: str,
+    snippets: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    """构造"还原视频/热点全貌"的 DeepSeek messages：概况 + 网络碎片 → 推断全貌。"""
+    snippet_lines: list[str] = []
+    for i, snip in enumerate(snippets or [], start=1):
+        line = f"{i}. [{str(snip.get('source') or '')}] {str(snip.get('title') or '').strip()}"
+        abstract = str(snip.get("abstract") or "").strip()
+        if abstract:
+            line += f" —— {abstract}"
+        snippet_lines.append(line)
+    snippets_block = "\n".join(snippet_lines) if snippet_lines else "（未检索到额外网络信息）"
+    system = (
+        "你是严谨的内容还原助手。基于给定的视频/热点概况，以及从网络检索到的零散信息，"
+        "并结合你已有的知识，推断并还原这个视频/热点最可能在讲什么。"
+        "务必明确这是【推断】而非确证；信息不足处不要硬编细节、可如实说明不确定。"
+        "输出 150–300 字中文：先一句话主旨，再分点列可借势的要点与情绪基调。"
+    )
+    user = (
+        f"标题：{title}\n来源：{source or '未知'}\n\n"
+        f"封面/标题/简介概况：\n{(overview or '（无）').strip()}\n\n"
+        f"网络检索到的相关信息：\n{snippets_block}\n\n"
+        "请据此还原这个视频/热点最可能的完整内容（标注为推断）。"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+def restore_topic_full_picture(
+    title: str,
+    source: str,
+    overview: str,
+    snippets: list[dict[str, Any]],
+    api_key: str | None = None,
+    model: str | None = None,
+    api_url: str | None = None,
+    timeout: int = 60,
+) -> str:
+    """让 DeepSeek 综合"概况 + 网络碎片 + 自身知识"还原热点全貌，返回纯文本（推断）。
+
+    未填 Key 时抛错；网络/HTTP/解析错误也抛错（由调用方决定是否降级）。
+    """
+    load_project_env()
+    resolved_api_key = (api_key or "").strip()
+    if not resolved_api_key:
+        raise RuntimeError("DeepSeek API Key 未填写")
+    endpoint = _normalize_chat_endpoint(api_url)
+    resolved_model = (model or os.getenv("DEEPSEEK_MODEL") or DEFAULT_DEEPSEEK_MODEL).strip()
+    body = {
+        "model": resolved_model,
+        "messages": _build_video_restore_messages(title, source, overview, snippets),
+        "temperature": 0.5,
+        "max_tokens": 600,
+        "stream": False,
+    }
+    request = Request(
+        endpoint,
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {resolved_api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        return _extract_deepseek_content(payload).strip()
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"DeepSeek 调用失败：HTTP {exc.code} {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"DeepSeek 网络请求失败：{exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("DeepSeek 返回了无法解析的 JSON") from exc
 
 
 def _extract_deepseek_content(payload: dict[str, Any]) -> str:

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import copy
 import json
+import os
 import re
+import threading
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -17,8 +21,10 @@ from hotstream.copywriter import (
     build_default_temporary_prompt,
     generate_ai_assist,
     generate_copy_with_deepseek,
+    restore_topic_full_picture,
     select_relevant_topics,
 )
+from hotstream.web_search import search_web_snippets
 from hotstream.image_scraper import build_custom_topic, fetch_related_images
 from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics
 from hotstream.video_analyzer import analyze_images_with_qwen, analyze_video_with_qwen
@@ -55,6 +61,58 @@ def _normalize_source(source: str) -> str:
     return aliases.get(normalized, normalized)
 
 
+# ── 热点抓取：进程内短 TTL 缓存 ─────────────────────────────────────────────
+# 每次进页面 + 每 60s 自动刷新 + 精选聚合五源，都会反复抓同一批源站；加一个进程内
+# TTL 缓存，让窗口期内的重复请求（同一用户的自动刷新、多用户、精选并发）直接命中，
+# 大幅减少对源站的真实请求与延迟/风控压力。TTL 可用 HOT_TOPICS_CACHE_TTL 调（秒，默认 60）。
+# ThreadingHTTPServer 多线程并发，故用锁保护；命中/写入都用深拷贝隔离，避免调用方对
+# 返回值的改动（如加 rank / 覆盖 source 标签）污染缓存。抓取在锁外进行，不阻塞其它线程。
+HOT_TOPICS_CACHE_TTL = float(os.getenv("HOT_TOPICS_CACHE_TTL", "60"))
+_hot_topics_cache: dict[tuple, tuple[float, list[dict[str, Any]]]] = {}
+_hot_topics_cache_lock = threading.Lock()
+
+
+def _hot_topics_cache_key(source: str, kwargs: dict[str, Any]) -> tuple:
+    """稳定缓存键：来源(归一化) + 非空参数排序。None/'' 视为未指定，使“只传 limit”与
+    “传了 limit 且 keyword=None”落到同一条目。"""
+    norm = (source or "toutiao").strip().lower()
+    items = tuple(sorted((k, v) for k, v in kwargs.items() if v not in (None, "")))
+    return (norm, items)
+
+
+def fetch_hot_topics_cached(
+    source: str = "toutiao",
+    *,
+    ttl: float | None = None,
+    **kwargs: Any,
+) -> list[dict[str, Any]]:
+    """带进程内 TTL 缓存的 fetch_hot_topics。ttl<=0 直接透传不缓存。
+
+    内部调用模块级 ``fetch_hot_topics`` 名字（单测 patch 该名字仍然生效）。失败不缓存。
+    """
+    effective_ttl = HOT_TOPICS_CACHE_TTL if ttl is None else ttl
+    if effective_ttl <= 0:
+        return fetch_hot_topics(source, **kwargs)
+
+    key = _hot_topics_cache_key(source, kwargs)
+    with _hot_topics_cache_lock:
+        cached = _hot_topics_cache.get(key)
+        if cached is not None and (time.monotonic() - cached[0]) < effective_ttl:
+            return copy.deepcopy(cached[1])  # 隔离副本，调用方可随意改动
+
+    # 未命中：锁外抓取（慢网络不持锁），成功后写入一份隔离副本。
+    topics = fetch_hot_topics(source, **kwargs)
+    with _hot_topics_cache_lock:
+        _hot_topics_cache[key] = (time.monotonic(), copy.deepcopy(topics))
+    return topics
+
+
+def clear_hot_topics_cache() -> None:
+    """清空热点缓存（测试隔离用，或需要强制刷新时）。"""
+    with _hot_topics_cache_lock:
+        _hot_topics_cache.clear()
+
+
 def build_hot_topics_response(
     limit: int = 30,
     source: str = "toutiao",
@@ -76,7 +134,7 @@ def build_hot_topics_response(
         # sources whose native dispatch always accepts these arguments.
         if source_key in {"bilibili", "douyin"} or keyword or category or sort:
             fetch_kwargs.update({"keyword": keyword, "category": category, "sort": sort})
-        topics = fetch_hot_topics(source_key, **fetch_kwargs)
+        topics = fetch_hot_topics_cached(source_key, **fetch_kwargs)
         body = _json_bytes({
             "success": True,
             "source": source_label,
@@ -219,7 +277,7 @@ def build_curated_topics_response(raw_body: bytes) -> tuple[int, dict[str, str],
         # (network / anti-bot) is skipped rather than failing the whole curation.
         def _fetch(source: str) -> list[dict[str, Any]]:
             try:
-                return fetch_hot_topics(source, limit=CURATED_PER_SOURCE_LIMIT)
+                return fetch_hot_topics_cached(source, limit=CURATED_PER_SOURCE_LIMIT)
             except Exception:
                 return []
 
@@ -343,22 +401,61 @@ def build_video_analysis_response(raw_body: bytes) -> tuple[int, dict[str, str],
     api_key = str(payload.get("api_key") or "").strip()
     model = str(payload.get("model") or "").strip() or None
     api_url = str(payload.get("api_url") or "").strip() or None
+    # DeepSeek 用于②联网检索后的③还原全貌；缺这组 Key 则只返回 Qwen 概况（降级）。
+    deepseek_api_key = str(payload.get("deepseek_api_key") or "").strip()
+    deepseek_api_url = str(payload.get("deepseek_api_url") or "").strip() or None
+    deepseek_model = str(payload.get("deepseek_model") or "").strip() or None
+    title = str(topic.get("title") or "").strip()
     if not api_key:
         return 400, headers, _json_bytes({"success": False, "error": "请先填写 Qwen API Key"})
-    if not str(topic.get("title") or "").strip():
+    if not title:
         return 400, headers, _json_bytes({"success": False, "error": "缺少待分析的视频标题"})
+
+    # ① Qwen-VL 看封面+标题+简介 → 概况（失败则整体 502，与原行为一致）。
     try:
         result = analyze_video_with_qwen(topic=topic, api_key=api_key, model=model, api_url=api_url)
-        body = _json_bytes({
-            "success": True,
-            "analysis": result.get("analysis") or {},
-            "raw_text": result.get("raw_text") or "",
-            "images": result.get("images") or [],
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
-        return 200, headers, body
     except Exception as exc:
         return 502, headers, _json_bytes({"success": False, "error": str(exc), "analysis": {}, "images": []})
+
+    analysis = result.get("analysis") or {}
+    raw_text = result.get("raw_text") or ""
+    images = result.get("images") or []
+    overview = (raw_text or str(analysis.get("summary") or "")).strip()
+
+    # ②联网检索 + ③DeepSeek 还原全貌（均 best-effort，任一失败降级回 Qwen 概况）。
+    inferred = ""
+    sources_hit: list[str] = []
+    if deepseek_api_key:
+        try:
+            search = search_web_snippets(title)
+        except Exception:
+            search = {"snippets": [], "sources_hit": []}
+        sources_hit = search.get("sources_hit") or []
+        try:
+            inferred = restore_topic_full_picture(
+                title=title,
+                source=str(topic.get("source") or ""),
+                overview=overview,
+                snippets=search.get("snippets") or [],
+                api_key=deepseek_api_key,
+                model=deepseek_model,
+                api_url=deepseek_api_url,
+                timeout=30,
+            )
+        except Exception:
+            inferred = ""
+
+    body = _json_bytes({
+        "success": True,
+        "analysis": analysis,
+        "raw_text": raw_text,
+        "overview": overview,
+        "inferred": inferred,          # DeepSeek 还原的全貌(推断, 前端可编辑); 空则前端用 raw_text 降级
+        "sources_hit": sources_hit,    # 实际命中的联网检索源(头条/百度/知乎)
+        "images": images,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return 200, headers, body
 
 
 def stream_ai_assist_response(handler: "HotStreamRequestHandler", raw_body: bytes) -> None:
@@ -676,10 +773,16 @@ def build_settings_get_response() -> tuple[int, dict[str, str], bytes]:
         conn.close()
     except Exception:
         saved = None
+    deepseek_key = saved.deepseek_api_key if saved else ""
+    qwen_key = saved.qwen_api_key if saved else ""
     return 200, headers, _json_bytes({
         "success": True,
-        "deepseek_api_key": saved.deepseek_api_key if saved else "",
-        "qwen_api_key": saved.qwen_api_key if saved else "",
+        "deepseek_api_key": deepseek_key,
+        "qwen_api_key": qwen_key,
+        # 与 Next.js /api/settings 契约对齐：前端用 has* 判断是否已配置（独立 Python
+        # standalone 路径也能正确点亮生成/分析按钮，不再恒为未配置）。
+        "hasDeepseekKey": bool(deepseek_key),
+        "hasQwenKey": bool(qwen_key),
         "global_prompt": saved.global_prompt if (saved and saved.global_prompt) else DEFAULT_GLOBAL_PROMPT,
     })
 
