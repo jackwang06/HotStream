@@ -874,6 +874,9 @@
     // 当前选中的 topic 是否带视频（B站/抖音视频源，或自定义链接检测到视频）。
     function selectedHasVideo() {
       if (!selectedTopic) return false;
+      // 精选热点是跨平台聚合的纯标题条目（没有可分析的视频地址/封面），即便来源是
+      // B站/抖音，也一律走新闻式直接生成，绝不触发视频分析门控。
+      if (selectedTopic.curated) return false;
       if (['B站', '抖音'].includes(selectedTopic.source)) return true;
       return selectedTopic.source === '自定义' && !!selectedTopic.has_video;
     }
@@ -911,6 +914,7 @@
       if (isCustom) {
         // 自定义模式不抓热榜：清空列表并提示用户解析链接。
         topics = [];
+        selectedTopic = null;  // 自清零，不依赖调用方先置空（防御性）
         if (fetchMeta) fetchMeta.textContent = '自定义链接模式：粘贴链接后点击「解析」。';
         topicList.innerHTML = '<div class="empty">粘贴链接后点击解析</div>';
         // 是否显示视频分析面板取决于已解析 topic 是否带视频。
@@ -1077,6 +1081,10 @@
     async function fetchHotTopics({ silent = false } = {}) {
       // 自定义链接模式不抓热榜（包括 60s 自动刷新也跳过）。
       if (isCustomMode()) return;
+      // 精选(curated)条目不属于任何单源热榜列表；抓热榜时丢弃残留的精选选择，
+      // 避免它在列表被替换后成为悬挂引用、把过期的幽灵 topic 送往后端。
+      // （正常单源选择不受影响，仍由下方保活块跨静默刷新保留。）
+      if (selectedTopic && selectedTopic.curated) selectedTopic = null;
       const source = sourceSelect.value;
       const sourceLabel = currentSourceLabel();
       fetchBtn.disabled = true;
@@ -1122,6 +1130,9 @@
       curateBtn.disabled = true;
       curateBtn.textContent = 'AI 正在按知识库精选全网热点…';
       selectedTopic = null;
+      // 精选模式不涉及视频分析：隐藏视频面板、清掉残留分析（下拉框可能停在 B站/抖音）。
+      if (videoAnalysisPanel) videoAnalysisPanel.classList.add('hidden');
+      resetVideoAnalysis();
       topicList.innerHTML = '<div class="empty">AI 正在从多平台聚合并智选热点，请稍候（约 20–40 秒）…</div>';
       try {
         const response = await fetch('/api/curated-topics', {
@@ -1139,8 +1150,9 @@
           showToast('精选结果为空');
           return;
         }
-        // Assign sequential ranks so the existing selectTopicItem lookup works.
-        curatedTopics.forEach((t, i) => { t.rank = i + 1; });
+        // Assign sequential ranks + mark each as curated so the video-analysis gate
+        // is skipped (curated entries are cross-platform titles with no analyzable video).
+        curatedTopics.forEach((t, i) => { t.rank = i + 1; t.curated = true; });
         // Replace global topics so generate flow picks up the selected topic.
         topics = curatedTopics;
 
@@ -1281,6 +1293,8 @@
     }
 
     analyzeVideoBtn.addEventListener('click', async () => {
+      // canAnalyzeVideo() 看的是来源模式/has_video；selectedHasVideo() 才会对精选
+      // (curated) 条目短路返回 false——后者是真正阻止精选条目走视频分析的关键门控。
       if (!selectedTopic || !canAnalyzeVideo() || !selectedHasVideo()) {
         showToast('请先选择一个视频');
         return;
