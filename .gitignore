@@ -25,3 +25,9 @@ venv/
 .idea/
 .vercel
 .worktrees/
+
+# Playwright MCP / E2E 调试产物（截图、快照、console 日志）
+.playwright-mcp/
+*-rendered.png
+pagebreak-*.png
+e2e-*.png
