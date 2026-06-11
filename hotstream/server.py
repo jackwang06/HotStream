@@ -24,6 +24,7 @@ from hotstream.copywriter import (
     restore_topic_full_picture,
     select_relevant_topics,
 )
+from hotstream.political_filter import filter_political_topics
 from hotstream.web_search import search_web_snippets
 from hotstream.image_scraper import build_custom_topic, fetch_related_images
 from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics
@@ -119,6 +120,7 @@ def build_hot_topics_response(
     keyword: str | None = None,
     category: str | None = None,
     sort: str | None = None,
+    political: bool = False,
 ) -> tuple[int, dict[str, str], bytes]:
     """Build the hot topics JSON response."""
     source_key = _normalize_source(source)
@@ -135,6 +137,9 @@ def build_hot_topics_response(
         if source_key in {"bilibili", "douyin"} or keyword or category or sort:
             fetch_kwargs.update({"keyword": keyword, "category": category, "sort": sort})
         topics = fetch_hot_topics_cached(source_key, **fetch_kwargs)
+        # 政治脱敏：缓存读取后、返回前过滤（缓存仍共享原始结果，过滤按请求生效）。
+        if political:
+            topics = filter_political_topics(topics)
         body = _json_bytes({
             "success": True,
             "source": source_label,
@@ -182,6 +187,7 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
     knowledge_base = str(payload.get("knowledge_base") or "")
     qwen_analysis = payload.get("qwen_analysis") if isinstance(payload.get("qwen_analysis"), dict) else None
     source_images = payload.get("source_images") if isinstance(payload.get("source_images"), list) else []
+    political = bool(payload.get("political_filter"))
     title = str(topic.get("title") or "").strip()
     if not title:
         return 400, headers, _json_bytes({"success": False, "error": "缺少热点标题，无法生成文案"})
@@ -190,6 +196,8 @@ def build_copy_response(raw_body: bytes) -> tuple[int, dict[str, str], bytes]:
 
     try:
         kwargs: dict[str, Any] = {"topic": topic, "brief": brief, "api_key": api_key, "qwen_analysis": qwen_analysis}
+        if political:
+            kwargs["political_filter"] = True
         if api_url is not None:
             kwargs["api_url"] = api_url
         if model is not None:
@@ -267,6 +275,7 @@ def build_curated_topics_response(raw_body: bytes) -> tuple[int, dict[str, str],
     api_url = str(payload.get("api_url") or "").strip() or None
     model = str(payload.get("model") or "").strip() or None
     knowledge_base = str(payload.get("knowledge_base") or "")
+    political = bool(payload.get("political_filter"))
     if not api_key:
         return 400, headers, _json_bytes(
             {"success": False, "error": "请先在设置配置文案生成 API Key", "topics": []}
@@ -287,6 +296,9 @@ def build_curated_topics_response(raw_body: bytes) -> tuple[int, dict[str, str],
                 for topic in source_topics:
                     if isinstance(topic, dict) and str(topic.get("title") or "").strip():
                         aggregated.append(topic)
+        # 政治脱敏：聚合后、精选前剔除涉政热点，模型永远看不到它们（精选自然不含政治）。
+        if political:
+            aggregated = filter_political_topics(aggregated)
         # Give each aggregated topic a stable global rank for display.
         for index, topic in enumerate(aggregated, start=1):
             topic["rank"] = index
@@ -560,6 +572,8 @@ def stream_ai_assist_response(handler: "HotStreamRequestHandler", raw_body: byte
             "after_text": after_text,
             "api_key": api_key,
         }
+        if bool(payload.get("political_filter")):
+            kwargs["political_filter"] = True
         if global_prompt is not None:
             kwargs["global_prompt"] = global_prompt
         if api_url is not None:
@@ -638,6 +652,7 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
             keyword = params.get("keyword", [""])[0]
             category = params.get("category", [""])[0]
             sort = params.get("sort", [""])[0]
+            political = params.get("political", ["0"])[0] in ("1", "true", "yes", "on")
             if parsed.path == "/api/toutiao-hot":
                 source = "toutiao"
             status, headers, body = build_hot_topics_response(
@@ -646,6 +661,7 @@ class HotStreamRequestHandler(SimpleHTTPRequestHandler):
                 keyword=keyword or None,
                 category=category or None,
                 sort=sort or None,
+                political=political,
             )
             self.send_response(status)
             for key, value in headers.items():

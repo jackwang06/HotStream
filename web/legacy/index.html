@@ -770,6 +770,12 @@
           <button class="main-btn" id="fetchBtn">刷新今日头条热点</button>
           <button class="main-btn" id="curateBtn">✨ 精选热点</button>
           <div class="curate-hint">按知识库精选全网最契合本景点的热点（聚合多平台 · DeepSeek 智选）</div>
+          <label id="politicalToggleWrap" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.9em;cursor:pointer;user-select:none;"
+                 title="开启后：所有数据源(含精选热点)中涉政热点不再刷出，生成的文案也绝不涉及政治内容">
+            <input type="checkbox" id="politicalToggle" style="cursor:pointer;">
+            <span>🛡️ 政治脱敏</span>
+            <span style="color:var(--muted,#888);font-size:0.85em;">涉政热点不刷出，文案不涉政</span>
+          </label>
           <div class="fetch-meta" id="fetchMeta">进入页面后自动抓取，每 60 秒刷新一次。</div>
 
           <div class="topic-list" id="topicList">
@@ -840,6 +846,21 @@
     const fetchBtn = document.getElementById('fetchBtn');
     const curateBtn = document.getElementById('curateBtn');
     const fetchMeta = document.getElementById('fetchMeta');
+    const politicalToggle = document.getElementById('politicalToggle');
+    // 政治脱敏开关（localStorage 持久化）。开启后热点过滤涉政、生成不涉政。
+    const POLITICAL_KEY = 'hotstream.politicalFilter';
+    function isPoliticalOn() { return !!(politicalToggle && politicalToggle.checked); }
+    if (politicalToggle) {
+      politicalToggle.checked = localStorage.getItem(POLITICAL_KEY) === '1';
+      politicalToggle.addEventListener('change', () => {
+        localStorage.setItem(POLITICAL_KEY, politicalToggle.checked ? '1' : '0');
+        showToast(politicalToggle.checked ? '已开启政治脱敏：涉政热点不再刷出' : '已关闭政治脱敏');
+        // 立即按新设置刷新当前列表；精选视图下重跑精选(带新标志)，避免被普通热榜覆盖、丢失精选结果。
+        if (isCustomMode()) return;
+        if (curatedActive) fetchCuratedTopics();
+        else fetchHotTopics();
+      });
+    }
     const keywordInput = document.getElementById('keyword');
     const sourceSelect = document.getElementById('source');
     const bilibiliTools = document.getElementById('bilibiliTools');
@@ -1132,6 +1153,7 @@
         const limitVal = Math.min(100, Math.max(1, isNaN(limitRaw) ? 30 : limitRaw));
         const categoryVal = bilibiliCategory.value;
         const params = new URLSearchParams({ source, limit: String(limitVal) });
+        if (isPoliticalOn()) params.set('political', '1');  // 政治脱敏：后端剔除涉政热点
         // 分类对所有来源生效（非 all 时传给服务端）
         if (categoryVal && categoryVal !== 'all') params.set('category', categoryVal);
         if (isBilibiliMode()) {
@@ -1174,7 +1196,7 @@
         const response = await fetch('/api/curated-topics', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
+          body: JSON.stringify({ political_filter: isPoliticalOn() })
         });
         const payload = await response.json();
         if (!response.ok || !payload.success) {
@@ -1469,7 +1491,8 @@
             qwen_analysis: (videoAnalysisEdit && videoAnalysisEdit.value.trim())
               ? { edited_text: videoAnalysisEdit.value.trim() }
               : null,
-            source_images: lastVideoImages
+            source_images: lastVideoImages,
+            political_filter: isPoliticalOn()
           })
         });
         const payload = await response.json();

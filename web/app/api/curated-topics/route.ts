@@ -41,6 +41,14 @@ export async function POST(req: Request) {
     );
   }
 
+  // 读取客户端 body 仅为取「政治脱敏」开关（其余凭证一律服务端注入，不信客户端）。
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    body = {};
+  }
+
   // Inject the user's key/url/model server-side; never trust client-supplied
   // values. The aggregation + curation runs entirely in the Python backend.
   const payload: Record<string, unknown> = {
@@ -48,6 +56,8 @@ export async function POST(req: Request) {
     api_url: settings.text_api_url || TEXT_DEFAULT_URL,
     model: settings.text_api_model || TEXT_DEFAULT_MODEL,
   };
+  // 政治脱敏开关：转发给 Python，聚合后剔除涉政热点。
+  if (body.political_filter) payload.political_filter = true;
   // Inject the enabled shared knowledge-base entries (global, server-side) so the
   // model can prefer hot topics that match planned activities etc.
   const knowledge = await buildKnowledgeText();

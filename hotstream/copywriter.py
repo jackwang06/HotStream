@@ -50,6 +50,15 @@ MARKDOWN_OUTPUT_INSTRUCTION = (
     "- 只输出推文正文本身，不要输出任何与正文无关的说明、解释或元信息。"
 )
 
+# 「政治脱敏」开启时追加到 system 提示的硬性约束。
+POLITICAL_DESENSITIZE_INSTRUCTION = (
+    "\n\n【政治脱敏 · 硬性要求】本次创作严禁涉及任何政治敏感内容——包括但不限于："
+    "政党、政府、国家领导人与官员、政策法规、选举、外交、制裁、军事、国际冲突、"
+    "意识形态、维权抗议、敏感地区的政治议题等。若热点本身带政治色彩，只从文旅、"
+    "自然风光、民俗、美食、节庆、生活方式等**非政治**角度切入；无法剥离政治的内容"
+    "一律回避不写。全文保持轻松正向的文旅营销风格，绝不出现上述任何政治元素。"
+)
+
 # 「默认提示词」= 每次生成文案的"任务+硬性要求+输出格式"指令脚手架。
 # 这是与具体热点无关的指令模板，per-user 的 user_settings.default_prompt 为空时回落到它。
 # 措辞与原 build_default_temporary_prompt 逐字保留，不要改写规则内容。
@@ -194,11 +203,15 @@ def build_deepseek_messages(
     qwen_analysis: dict[str, Any] | None = None,
     knowledge_base: str | None = None,
     default_prompt: str | None = None,
+    political_filter: bool = False,
 ) -> list[dict[str, str]]:
     system_prompt = (global_prompt or DEFAULT_GLOBAL_PROMPT).strip()
     # 无论用户预设如何，都追加固定的 Markdown 排版指令到 system_prompt，
     # 使输出统一为 Markdown（messages 结构不变，仍为 [system,(knowledge),user]）。
     system_prompt = system_prompt + MARKDOWN_OUTPUT_INSTRUCTION
+    # 政治脱敏开启时，追加硬性涉政回避约束（叠加在所有用户预设之上）。
+    if political_filter:
+        system_prompt = system_prompt + POLITICAL_DESENSITIZE_INSTRUCTION
     user_prompt = (
         temporary_prompt
         or build_default_temporary_prompt(
@@ -256,6 +269,7 @@ def build_ai_assist_messages(
     image_analysis: str = "",
     before_text: str = "",
     after_text: str = "",
+    political_filter: bool = False,
 ) -> list[dict[str, str]]:
     """Assemble the [system, user] messages for the 「AI 帮写」 (AI assist) feature.
 
@@ -274,6 +288,9 @@ def build_ai_assist_messages(
       (no selection involved, no images).
     """
     system_prompt = (global_prompt or DEFAULT_GLOBAL_PROMPT).strip() + MARKDOWN_OUTPUT_INSTRUCTION
+    # 政治脱敏开启时，AI帮写(扩写/缩写/改写/补充)同样注入涉政回避硬约束。
+    if political_filter:
+        system_prompt = system_prompt + POLITICAL_DESENSITIZE_INSTRUCTION
     text = (selected_text or "").strip()
     normalized_mode = (mode or "").strip().lower()
 
@@ -323,6 +340,7 @@ def generate_ai_assist(
     model: str | None = None,
     api_url: str | None = None,
     timeout: int = 45,
+    political_filter: bool = False,
 ) -> str:
     """Run the 「AI 帮写」 expand/condense/rewrite/supplement operation via DeepSeek.
 
@@ -354,6 +372,7 @@ def generate_ai_assist(
         image_analysis=image_analysis,
         before_text=before_text,
         after_text=after_text,
+        political_filter=political_filter,
     )
 
     endpoint = _normalize_chat_endpoint(api_url)
@@ -660,6 +679,7 @@ def generate_copy_with_deepseek(
     api_url: str | None = None,
     knowledge_base: str | None = None,
     default_prompt: str | None = None,
+    political_filter: bool = False,
 ) -> str:
     """Generate copy for a selected hot topic using DeepSeek chat completions."""
     load_project_env()
@@ -679,6 +699,7 @@ def generate_copy_with_deepseek(
             qwen_analysis=qwen_analysis,
             knowledge_base=knowledge_base,
             default_prompt=default_prompt,
+            political_filter=political_filter,
         ),
         "temperature": 0.72,
         "max_tokens": 1200,

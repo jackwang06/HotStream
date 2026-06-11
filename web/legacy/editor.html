@@ -2201,6 +2201,8 @@
       let captured = null;
       let withImages = false;
       const payload = { mode };
+      // 政治脱敏：editor 是独立页，复用首页同一 localStorage 键，带进 AI帮写请求。
+      payload.political_filter = localStorage.getItem('hotstream.politicalFilter') === '1';
 
       if (mode === 'supplement') {
         const ctx = captureCaretContext();

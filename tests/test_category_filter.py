@@ -267,7 +267,7 @@ def _do_get_with_limit_param(limit_param: str | None) -> int:
 
     captured = {}
 
-    def fake_build(limit, source, keyword, category, sort):
+    def fake_build(limit, source, keyword, category, sort, political=False):
         captured["limit"] = limit
         return 200, {"Content-Type": "application/json; charset=utf-8"}, b'{"success":true,"topics":[],"updated_at":"x","source":"A","source_key":"A"}'
 
