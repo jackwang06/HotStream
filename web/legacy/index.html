@@ -288,6 +288,20 @@
       white-space: nowrap;
     }
 
+    .topic-tag {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.6;
+      background: var(--accent-warm-soft, #fef0e6);
+      color: var(--accent-warm, #c2622a);
+      margin-left: 6px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
     .topic-reason {
       display: block;
       margin-top: 3px;
@@ -1073,7 +1087,7 @@
       topicList.innerHTML = visibleTopics.map(topic => `
         <div class="topic" role="button" tabindex="0" data-rank="${topic.rank}">
           <span class="rank">${topic.rank}</span>
-          <span class="topic-text"><strong>${escapeHtml(topic.title)}</strong><span class="topic-source">${escapeHtml(topic.source || '今日头条')}</span></span>
+          <span class="topic-text"><strong>${escapeHtml(topic.title)}</strong><span class="topic-source">${escapeHtml(topic.source || '今日头条')}</span>${topic.tag ? `<span class="topic-tag">${escapeHtml(topic.tag)}</span>` : ''}</span>
           <span class="hot">热度 ${Number(topic.hot_value || 0).toLocaleString('zh-CN')}</span>
           ${topic.url ? `
             <a class="topic-link" href="${escapeHtml(topic.url)}" target="_blank" rel="noopener noreferrer" aria-label="打开原文链接：${escapeHtml(topic.title)}" title="打开原文链接"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
@@ -1223,7 +1237,7 @@
             <span class="topic-text">
               <strong>${escapeHtml(topic.title)}</strong>
               <span class="topic-source">
-                <span class="source-badge">${escapeHtml(topic.source || '热点')}</span>
+                <span class="source-badge">${escapeHtml(topic.source || '热点')}</span>${topic.tag ? `<span class="topic-tag">${escapeHtml(topic.tag)}</span>` : ''}
               </span>
               ${topic.reason ? `<span class="topic-reason">💡 ${escapeHtml(topic.reason)}</span>` : ''}
             </span>

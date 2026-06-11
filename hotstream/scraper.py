@@ -65,6 +65,31 @@ CATEGORIES: dict[str, dict[str, Any]] = {
     },
 }
 
+def classify_topic_tag(topic: dict[str, Any]) -> str:
+    """据标题/标签/简介匹配 CATEGORIES 关键词，返回首个命中的类别标签作为 tag（无则空串）。
+
+    与 _filter_topics_by_category 同一套关键词，保证"分类筛选"与"tag 标注"口径一致。
+    """
+    text = " ".join(str(topic.get(k) or "") for k in ("title", "label", "desc")).lower()
+    if not text.strip():
+        return ""
+    for key, cfg in CATEGORIES.items():
+        if key == "all":
+            continue
+        for kw in cfg.get("keywords", []):
+            if kw and kw.lower() in text:
+                return str(cfg.get("label") or "")
+    return ""
+
+
+def tag_topics(topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """给每个 topic 补一个 'tag' 字段（已有非空则不覆盖）。原地修改并返回。"""
+    for t in topics:
+        if isinstance(t, dict) and not t.get("tag"):
+            t["tag"] = classify_topic_tag(t)
+    return topics
+
+
 SOURCE_LABELS = {
     "toutiao": "今日头条",
     "zhihu": "知乎",

@@ -168,6 +168,8 @@ def build_default_temporary_prompt(
         topic_lines.append(f"热度：{hot_value}")
     if label:
         topic_lines.append(f"补充信息：{label}")
+    if topic.get("tag"):
+        topic_lines.append(f"内容类别：{topic.get('tag')}（可据此选取切入角度，但不必强行点名类别）")
     if topic.get("url"):
         topic_lines.append(f"原始链接：{topic.get('url')}")
     if topic.get("desc"):

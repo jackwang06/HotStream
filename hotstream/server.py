@@ -27,7 +27,7 @@ from hotstream.copywriter import (
 from hotstream.political_filter import filter_political_topics
 from hotstream.web_search import search_web_snippets
 from hotstream.image_scraper import build_custom_topic, fetch_related_images
-from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics
+from hotstream.scraper import SOURCE_LABELS, fetch_hot_topics, tag_topics
 from hotstream.video_analyzer import analyze_images_with_qwen, analyze_video_with_qwen
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -140,6 +140,8 @@ def build_hot_topics_response(
         # 政治脱敏：缓存读取后、返回前过滤（缓存仍共享原始结果，过滤按请求生效）。
         if political:
             topics = filter_political_topics(topics)
+        # 给每条热点补类别 tag（前端显示 + 生成时作切入角度参考）。
+        topics = tag_topics(topics)
         body = _json_bytes({
             "success": True,
             "source": source_label,
@@ -318,6 +320,7 @@ def build_curated_topics_response(raw_body: bytes) -> tuple[int, dict[str, str],
         # Re-rank the curated subset so the frontend shows 1..n in selection order.
         for index, topic in enumerate(selected, start=1):
             topic["rank"] = index
+        selected = tag_topics(selected)  # 精选条目也带类别 tag
         body = _json_bytes({
             "success": True,
             "topics": selected,
