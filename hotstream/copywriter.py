@@ -472,12 +472,13 @@ def _build_selection_messages(
     sections.append("候选热点清单（每行：序号. [来源] 标题）：\n" + "\n".join(topic_lines))
 
     sections.append(
-        f"请从以上候选中选出最多 {CURATED_TOPICS_MAX} 条最适合为本景点借势宣传的热点"
-        "（风光/旅游/乡村/文旅类，或与知识库中将办活动相关的热点）。"
+        f"请从以上候选中选出 3～{CURATED_TOPICS_MAX} 条可为本景点借势宣传的热点。"
+        "借势＝从文旅角度找关联：自然/风光/旅游/乡村/民俗/美食/亲子/节庆/季节/生活/娱乐/赛事等题材，"
+        "以及与知识库中将办活动（如音乐演唱会、美食、露营派对、夏日沙滩、烧烤、观赛等）相关的，都可入选。"
+        "请尽量选满可用的、能自然切入的热点，优先选与知识库活动或风光/旅游/乡村/文旅相关的；"
+        "只有当某条热点确实完全无法与本景点自然关联时才排除。除非候选里真的没有任何可借势的，否则不要返回空。"
         "严格只返回 JSON 对象，格式为 {\"selected\":[{\"index\":序号, \"reason\":\"20字内理由\"}]}，"
-        "index 必须是上面清单里的序号整数。"
-        "宁缺毋滥：不要选与景点无关、只能硬蹭的热点；没有合适的就返回空数组。"
-        "除 JSON 外不要输出任何其它文字。"
+        "index 必须是上面清单里的序号整数。除 JSON 外不要输出任何其它文字。"
     )
 
     return [
@@ -518,7 +519,10 @@ def select_relevant_topics(
         "model": resolved_model,
         "messages": _build_selection_messages(topics, knowledge_base=knowledge_base),
         "temperature": 0.3,
-        "max_tokens": 1200,
+        # 留足预算：推理型模型(deepseek-reasoner / v4-pro 等)会先产出大量 reasoning_content，
+        # 若上限过低会把随后的 JSON 答案截断导致解析失败、精选返回空。选择 JSON 本身很短，
+        # 调高上限对非推理模型(deepseek-chat)不增加实际消耗（它会自然提前停止）。
+        "max_tokens": 6000,
         "stream": False,
     }
     request = Request(
